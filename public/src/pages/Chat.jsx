@@ -138,11 +138,14 @@ export default function Chat() {
 
     // 3. Update the sidebar chats list (MUST RUN FOR ALL MESSAGES)
     setChats((prevChats) => {
-      // ✅ SAFETY CHECK: Reconstruct the latestMessage object defensively
+      
+      // ✅ ANTI-CORRUPTION: Reconstruct the latestMessage object defensively
+      // This is the source of the persistent crash—a malformed object in the list update.
       const updatedLatestMessage = {
           _id: newMessage._id,
-          message: newMessage.message || { text: "" }, // Default to empty text object
-          sender: newMessage.sender || currentUser, // Use current user as fallback
+          // Ensure structure always matches what Contacts.jsx rendering expects
+          message: newMessage.message || { text: "" }, 
+          sender: newMessage.sender || currentUser, // Fallback to current user if sender details are missing
           createdAt: newMessage.createdAt || new Date().toISOString(),
       };
       
