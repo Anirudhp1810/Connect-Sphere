@@ -116,6 +116,7 @@ npm start
 
 Frontend runs at:
 http://localhost:5173
+
 -------------------------------------
 
 ☁️ Deployment
