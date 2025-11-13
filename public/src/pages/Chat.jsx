@@ -112,36 +112,37 @@ export default function Chat() {
 
     // Safety Check: We must have a message and a chat ID to proceed
     if (!newMessage || !newMessage.chat || !newMessage.chat._id) {
+        console.error("Received message without chat ID. Ignoring.");
         return; 
     }
 
-    // 1. Identify if the chat is currently open
-    const isForOpenChat = currentChatRef.current && newMessage.chat && currentChatRef.current._id === newMessage.chat._id;
-
     // --- CRITICAL FIX: Block setArrivalMessage if from self ---
-    if (isForOpenChat) {
-        // Only allow prop update if it is NOT from the current user (my other device)
-        if (!isMessageFromSelf) {
-            setArrivalMessage({ ...newMessage, fromSelf: false });
-        }
+    if (isMessageFromSelf) {
+        // Only proceed to setChats logic
     } 
     // --- CRITICAL FIX: Block notifications if from self ---
-    else if (!isMessageFromSelf) {
-      // Increment notifications (only runs if chat is NOT open AND NOT from self)
-      setNotifications((prev) => ({
-        ...prev,
-        [newMessage.chat._id]: (prev[newMessage.chat._id] || 0) + 1,
-      }));
+    else {
+      // 1. Identify if the chat is currently open
+      const isForOpenChat = currentChatRef.current && newMessage.chat && currentChatRef.current._id === newMessage.chat._id;
+
+      if (isForOpenChat) {
+        setArrivalMessage({ ...newMessage, fromSelf: false });
+      } else {
+        // Increment notifications (only runs if chat is NOT open AND NOT from self)
+        setNotifications((prev) => ({
+          ...prev,
+          [newMessage.chat._id]: (prev[newMessage.chat._id] || 0) + 1,
+        }));
+      }
     }
 
     // 3. Update the sidebar chats list (MUST RUN FOR ALL MESSAGES)
     setChats((prevChats) => {
-      // Create a clean object for the latestMessage field to prevent corruption
+      // ✅ SAFETY CHECK: Reconstruct the latestMessage object defensively
       const updatedLatestMessage = {
           _id: newMessage._id,
-          // Ensure nested fields are handled safely for rendering in Contacts.jsx
-          message: { text: newMessage.message?.text || newMessage.message || "" }, 
-          sender: newMessage.sender || currentUser, // Use current user as fallback sender for sidebar display consistency
+          message: newMessage.message || { text: "" }, // Default to empty text object
+          sender: newMessage.sender || currentUser, // Use current user as fallback
           createdAt: newMessage.createdAt || new Date().toISOString(),
       };
       
@@ -290,7 +291,6 @@ export default function Chat() {
     </>
   );
 }
-
 
 // --- STYLES ---
 const Container = styled.div`
