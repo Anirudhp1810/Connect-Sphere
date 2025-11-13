@@ -40,7 +40,7 @@ const io = socket(server, {
       "http://localhost:3001", // ✅ ADDED THIS: Fixes your specific issue
       "http://localhost:5173", 
       "http://localhost:5174", 
-      "https://connect-sphere-qq1agcbck-anirudhs-projects-7b96baf3.vercel.app",
+      process.env.CLIENT_URL,
     ],
     credentials: true,
   },

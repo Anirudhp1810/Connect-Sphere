@@ -167,6 +167,9 @@ const FormContainer = styled.div`
     padding: 3rem 4rem;
     width: 100%;
     max-width: 450px;
+    img { 
+        mix-blend-mode: screen; 
+      }
   }
 
   input {
