@@ -318,8 +318,8 @@ export default function ChatContainer({
                       message.fromSelf ? "sended" : "recieved"
                     }`}
                   >
-                    {/* Group Chat: Sender Avatar */}
-                    {currentChat.isGroupChat && !message.fromSelf && (
+                    {/* ✅ DEFENSIVE GUARD 1: Check if sender object exists before rendering avatar */}
+                    {currentChat.isGroupChat && !message.fromSelf && message.sender && (
                        <div className="avatar-mini">
                         <img
                           src={`data:image/svg+xml;base64,${message.sender.avatarImage}`}
@@ -329,8 +329,8 @@ export default function ChatContainer({
                     )}
 
                     <div className="message-bubble">
-                      {/* Group Chat: Sender Name */}
-                      {currentChat.isGroupChat && !message.fromSelf && (
+                      {/* ✅ DEFENSIVE GUARD 2: Check if sender object exists before rendering name */}
+                      {currentChat.isGroupChat && !message.fromSelf && message.sender && (
                         <span className="sender-name">
                           {message.sender?.username}
                         </span>
