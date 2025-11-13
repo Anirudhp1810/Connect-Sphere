@@ -108,27 +108,28 @@ export default function Chat() {
   // 🔴 FINAL FIX LOCATION: Blocking self-sent messages at the source
   const handleMessageReceived = useCallback((newMessage) => {
     
-    // 1. Check if the message sender is ME (using string coercion for safety)
+    // 1. Identify if the message sender is ME (using string coercion for safety)
     const isMessageFromSelf = String(newMessage.sender?._id) === String(currentUser?._id);
 
     // 🛑 CRITICAL GUARD: If this message came from me (via another device), 
-    // block the entire processing chain to prevent the setChats crash.
+    // block the notification and arrivalMessage logic, but ensure setChats runs.
     if (isMessageFromSelf) {
-        return; 
-    }
-
-    // 2. Proceed ONLY for messages from OTHERS
-    const isForOpenChat = currentChatRef.current && newMessage.chat && currentChatRef.current._id === newMessage.chat._id;
-
-    if (isForOpenChat) {
-      setArrivalMessage({ ...newMessage, fromSelf: false });
+        // We skip notification/arrivalMessage setting, but allow the list update (Step 3) to run.
     } else {
-      // Increment notifications (only runs if chat is NOT open)
-      setNotifications((prev) => ({
-        ...prev,
-        [newMessage.chat._id]: (prev[newMessage.chat._id] || 0) + 1,
-      }));
+      // 2. Proceed ONLY for messages from OTHERS
+      const isForOpenChat = currentChatRef.current && newMessage.chat && currentChatRef.current._id === newMessage.chat._id;
+
+      if (isForOpenChat) {
+        setArrivalMessage({ ...newMessage, fromSelf: false });
+      } else {
+        // Increment notifications (only runs if chat is NOT open AND NOT from self)
+        setNotifications((prev) => ({
+          ...prev,
+          [newMessage.chat._id]: (prev[newMessage.chat._id] || 0) + 1,
+        }));
+      }
     }
+
 
     // 3. Update the sidebar chats list (latest message/order update)
     setChats((prevChats) => {
@@ -257,8 +258,22 @@ export default function Chat() {
         )}
       </Container>
 
-      <GroupChatModal showModal={showGroupModal} setShowModal={setShowGroupModal} currentUser={currentUser} chats={chats} setChats={setChats} socket={socket} />
-      <SearchModal showModal={showSearchModal} setShowModal={setShowSearchModal} currentUser={currentUser} chats={chats} setChats={setChats} setCurrentChat={setCurrentChat} />
+      <GroupChatModal
+        showModal={showGroupModal}
+        setShowModal={setShowGroupModal}
+        currentUser={currentUser}
+        chats={chats}
+        setChats={setChats}
+        socket={socket}
+      />
+      <SearchModal
+        showModal={showSearchModal}
+        setShowModal={setShowSearchModal}
+        currentUser={currentUser}
+        chats={chats}
+        setChats={setChats}
+        setCurrentChat={setCurrentChat}
+      />
     </>
   );
 }
