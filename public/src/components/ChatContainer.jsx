@@ -34,7 +34,7 @@ export default function ChatContainer({
     return new Set(saved ? JSON.parse(saved) : []);
   });
 
-  // Set chat header
+  // Set chat header (Logic remains same)
   useEffect(() => {
     if (currentChat && currentUser) {
       if (currentChat.isGroupChat) {
@@ -52,7 +52,7 @@ export default function ChatContainer({
     }
   }, [currentChat, currentUser]);
 
-  // Fetch messages and mark as read
+  // Fetch messages and mark as read (Logic remains same)
   useEffect(() => {
     async function fetchMessages() {
       if (currentChat && currentUser) {
@@ -89,7 +89,7 @@ export default function ChatContainer({
     fetchMessages();
   }, [currentChat, currentUser, socket]);
 
-  // Handle sending a new message
+  // Handle sending a new message (Logic remains same)
   const handleSendMsg = async (msg) => {
     if (!currentChat || !currentUser) return;
     try {
@@ -118,7 +118,7 @@ export default function ChatContainer({
     }
   };
 
-  // Socket listeners
+  // Socket listeners (Logic remains same)
   useEffect(() => {
     const currentSocket = socket.current;
 
@@ -160,9 +160,18 @@ export default function ChatContainer({
     };
   }, [socket, currentChat]);
 
-  // Handle arrivalMessage
+  // ✅ FIX FOR DOUBLE-PROCESSING AND CRASH
   useEffect(() => {
     if (!arrivalMessage) return;
+    
+    // 🛑 GUARD CLAUSE: If the message arrived, but the sender ID matches my current user ID,
+    // it means I sent it from another device. I should ignore it since the sending device 
+    // already added it locally via handleSendMsg.
+    if (arrivalMessage.sender?._id === currentUser?._id) {
+        setArrivalMessage(null);
+        return;
+    }
+
     const belongsToOpenChat = currentChat && arrivalMessage.chat && currentChat._id === arrivalMessage.chat._id;
 
     if (belongsToOpenChat) {
@@ -192,7 +201,7 @@ export default function ChatContainer({
     scrollRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isTyping]);
 
-  // --- Delete functions ---
+  // --- Delete functions (Logic remains same) ---
   const handleDeleteForEveryone = async (messageId) => {
     setActiveDeleteMenu(null);
     setMessages((prev) =>
@@ -225,7 +234,7 @@ export default function ChatContainer({
     localStorage.setItem("deletedForMe", JSON.stringify([...newDeleted]));
   };
 
-  // --- Helper Render Functions ---
+  // --- Helper Render Functions (Logic remains same) ---
   const getSeenStatus = (message) => {
     if (!message.fromSelf || !currentChat || !currentUser) return null;
     const otherUserIds = currentChat.users
