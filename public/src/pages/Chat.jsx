@@ -105,51 +105,65 @@ export default function Chat() {
     }
   }, [currentUser]);
 
-  // 🔴 FINAL FIX LOCATION: Blocking self-sent messages at the source
+  // 🔴 FINAL FIX LOCATION: Stabilizing state update during self-sent messages
   const handleMessageReceived = useCallback((newMessage) => {
     
-    // 1. Identify if the message sender is ME (using string coercion for safety)
     const isMessageFromSelf = String(newMessage.sender?._id) === String(currentUser?._id);
 
-    // 🛑 CRITICAL GUARD: If this message came from me (via another device), 
-    // block the notification and arrivalMessage logic, but ensure setChats runs.
-    if (isMessageFromSelf) {
-        // We skip notification/arrivalMessage setting, but allow the list update (Step 3) to run.
-    } else {
-      // 2. Proceed ONLY for messages from OTHERS
-      const isForOpenChat = currentChatRef.current && newMessage.chat && currentChatRef.current._id === newMessage.chat._id;
-
-      if (isForOpenChat) {
-        setArrivalMessage({ ...newMessage, fromSelf: false });
-      } else {
-        // Increment notifications (only runs if chat is NOT open AND NOT from self)
-        setNotifications((prev) => ({
-          ...prev,
-          [newMessage.chat._id]: (prev[newMessage.chat._id] || 0) + 1,
-        }));
-      }
+    // Safety Check: We must have a message and a chat ID to proceed
+    if (!newMessage || !newMessage.chat || !newMessage.chat._id) {
+        return; 
     }
 
+    // 1. Identify if the chat is currently open
+    const isForOpenChat = currentChatRef.current && newMessage.chat && currentChatRef.current._id === newMessage.chat._id;
 
-    // 3. Update the sidebar chats list (latest message/order update)
+    // --- CRITICAL FIX: Block setArrivalMessage if from self ---
+    if (isForOpenChat) {
+        // Only allow prop update if it is NOT from the current user (my other device)
+        if (!isMessageFromSelf) {
+            setArrivalMessage({ ...newMessage, fromSelf: false });
+        }
+    } 
+    // --- CRITICAL FIX: Block notifications if from self ---
+    else if (!isMessageFromSelf) {
+      // Increment notifications (only runs if chat is NOT open AND NOT from self)
+      setNotifications((prev) => ({
+        ...prev,
+        [newMessage.chat._id]: (prev[newMessage.chat._id] || 0) + 1,
+      }));
+    }
+
+    // 3. Update the sidebar chats list (MUST RUN FOR ALL MESSAGES)
     setChats((prevChats) => {
+      // Create a clean object for the latestMessage field to prevent corruption
+      const updatedLatestMessage = {
+          _id: newMessage._id,
+          // Ensure nested fields are handled safely for rendering in Contacts.jsx
+          message: { text: newMessage.message?.text || newMessage.message || "" }, 
+          sender: newMessage.sender || currentUser, // Use current user as fallback sender for sidebar display consistency
+          createdAt: newMessage.createdAt || new Date().toISOString(),
+      };
+      
       const existingIndex = prevChats.findIndex((c) => c._id === newMessage.chat._id);
+      
       if (existingIndex !== -1) {
-        const updatedChat = { ...prevChats[existingIndex], latestMessage: newMessage };
+        const updatedChat = { ...prevChats[existingIndex], latestMessage: updatedLatestMessage };
         const others = prevChats.filter((_, i) => i !== existingIndex);
         return [updatedChat, ...others];
       } else {
+        // Fallback for new chat creation (safe consistency)
         const newChatItem = {
           _id: newMessage.chat._id,
           users: newMessage.chat.users || [],
           isGroupChat: newMessage.chat.isGroupChat || false,
           chatName: newMessage.chat.chatName || "",
-          latestMessage: newMessage,
+          latestMessage: updatedLatestMessage,
         };
         return [newChatItem, ...prevChats];
       }
     });
-  }, [currentUser]); // currentUser must be a dependency
+  }, [currentUser]);
 
   // ✅ SOCKET SETUP (WITH RECONNECTION FIX)
   useEffect(() => {
@@ -176,7 +190,6 @@ export default function Chat() {
       setOnlineUsers((prev) => prev.filter((id) => id !== userId));
     });
 
-    // 🔴 LISTENER: Now uses the guarded handleMessageReceived
     socket.current.on("message-received", handleMessageReceived);
     socket.current.on("added-to-group", (newChat) => setChats((prev) => [newChat, ...prev]));
 
@@ -277,6 +290,7 @@ export default function Chat() {
     </>
   );
 }
+
 
 // --- STYLES ---
 const Container = styled.div`
