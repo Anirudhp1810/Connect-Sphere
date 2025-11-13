@@ -72,31 +72,33 @@ export default function Chat() {
     checkUser();
   }, [navigate]);
 
-  useEffect(() => {
-    async function getChats() {
-      if (currentUser) {
-        if (!currentUser.isAvatarImageSet) {
-          navigate("/setAvatar");
-          return;
-        }
-        try {
-          const { data } = await axios.get(`${fetchChatsRoute}/${currentUser._id}`);
-          setChats(data);
+  // Fetches chat list from API (Used for initial load AND socket updates now)
+  const getChats = useCallback(async () => {
+    if (currentUser) {
+      if (!currentUser.isAvatarImageSet) {
+        navigate("/setAvatar");
+        return;
+      }
+      try {
+        const { data } = await axios.get(`${fetchChatsRoute}/${currentUser._id}`);
+        setChats(data);
 
-          const initialNotifications = {};
-          data.forEach((chat) => {
-            if (chat.unreadCounts && chat.unreadCounts[currentUser._id]) {
-              initialNotifications[chat._id] = chat.unreadCounts[currentUser._id];
-            }
-          });
-          setNotifications(initialNotifications);
-        } catch (err) {
-          console.error("Failed to fetch chats:", err);
-        }
+        const initialNotifications = {};
+        data.forEach((chat) => {
+          if (chat.unreadCounts && chat.unreadCounts[currentUser._id]) {
+            initialNotifications[chat._id] = chat.unreadCounts[currentUser._id];
+          }
+        });
+        setNotifications(initialNotifications);
+      } catch (err) {
+        console.error("Failed to fetch chats:", err);
       }
     }
-    getChats();
   }, [currentUser, navigate]);
+
+  useEffect(() => {
+      getChats();
+  }, [getChats]);
 
   const clearNotification = useCallback((chatId) => {
     setNotifications((prev) => ({ ...prev, [chatId]: 0 }));
@@ -105,71 +107,38 @@ export default function Chat() {
     }
   }, [currentUser]);
 
-  // 🔴 FINAL FIX LOCATION: Stabilizing state update during self-sent messages
+  // 🔴 FINAL FIX: Discard socket message data and trigger API fetch
   const handleMessageReceived = useCallback((newMessage) => {
     
     const isMessageFromSelf = String(newMessage.sender?._id) === String(currentUser?._id);
 
-    // Safety Check: We must have a message and a chat ID to proceed
-    if (!newMessage || !newMessage.chat || !newMessage.chat._id) {
-        console.error("Received message without chat ID. Ignoring.");
+    // If the message came from me (via another device), ignore the event completely 
+    // to prevent the crash, as the sender already updated their sidebar locally.
+    if (isMessageFromSelf) {
         return; 
     }
 
-    // --- CRITICAL FIX: Block setArrivalMessage if from self ---
-    if (isMessageFromSelf) {
-        // Only proceed to setChats logic
-    } 
-    // --- CRITICAL FIX: Block notifications if from self ---
-    else {
-      // 1. Identify if the chat is currently open
-      const isForOpenChat = currentChatRef.current && newMessage.chat && currentChatRef.current._id === newMessage.chat._id;
+    // 1. Immediately re-fetch the entire chat list to get the structurally correct latestMessage
+    getChats(); 
 
-      if (isForOpenChat) {
+    // 2. ONLY set arrivalMessage if the chat is currently open
+    const isForOpenChat = currentChatRef.current && newMessage.chat && currentChatRef.current._id === newMessage.chat._id;
+
+    if (isForOpenChat) {
         setArrivalMessage({ ...newMessage, fromSelf: false });
-      } else {
-        // Increment notifications (only runs if chat is NOT open AND NOT from self)
-        setNotifications((prev) => ({
-          ...prev,
-          [newMessage.chat._id]: (prev[newMessage.chat._id] || 0) + 1,
-        }));
-      }
+    } else {
+      // Increment notifications for closed chats (runs only if NOT from self)
+      setNotifications((prev) => ({
+        ...prev,
+        [newMessage.chat._id]: (prev[newMessage.chat._id] || 0) + 1,
+      }));
     }
+    
+    // NOTE: The setChats logic has been moved inside getChats() and is removed from here.
 
-    // 3. Update the sidebar chats list (MUST RUN FOR ALL MESSAGES)
-    setChats((prevChats) => {
-      
-      // ✅ ANTI-CORRUPTION: Reconstruct the latestMessage object defensively
-      // This is the source of the persistent crash—a malformed object in the list update.
-      const updatedLatestMessage = {
-          _id: newMessage._id,
-          // Ensure structure always matches what Contacts.jsx rendering expects
-          message: newMessage.message || { text: "" }, 
-          sender: newMessage.sender || currentUser, // Fallback to current user if sender details are missing
-          createdAt: newMessage.createdAt || new Date().toISOString(),
-      };
-      
-      const existingIndex = prevChats.findIndex((c) => c._id === newMessage.chat._id);
-      
-      if (existingIndex !== -1) {
-        const updatedChat = { ...prevChats[existingIndex], latestMessage: updatedLatestMessage };
-        const others = prevChats.filter((_, i) => i !== existingIndex);
-        return [updatedChat, ...others];
-      } else {
-        // Fallback for new chat creation (safe consistency)
-        const newChatItem = {
-          _id: newMessage.chat._id,
-          users: newMessage.chat.users || [],
-          isGroupChat: newMessage.chat.isGroupChat || false,
-          chatName: newMessage.chat.chatName || "",
-          latestMessage: updatedLatestMessage,
-        };
-        return [newChatItem, ...prevChats];
-      }
-    });
-  }, [currentUser]);
+  }, [currentUser, getChats]); // getChats is now a dependency
 
-  // ✅ SOCKET SETUP (WITH RECONNECTION FIX)
+  // ✅ SOCKET SETUP
   useEffect(() => {
     if (!currentUser) return;
 
@@ -195,12 +164,12 @@ export default function Chat() {
     });
 
     socket.current.on("message-received", handleMessageReceived);
-    socket.current.on("added-to-group", (newChat) => setChats((prev) => [newChat, ...prev]));
-
+    socket.current.on("added-to-group", (newChat) => getChats()); // Also trigger refresh for new group
+    
     return () => {
       if (socket.current) socket.current.disconnect();
     };
-  }, [currentUser, handleMessageReceived]);
+  }, [currentUser, handleMessageReceived, getChats]);
 
   const handleChatChange = (chat) => {
     setCurrentChat(chat);
@@ -277,7 +246,7 @@ export default function Chat() {
 
       <GroupChatModal
         showModal={showGroupModal}
-        setShowModal={setShowGroupModal}
+        setShowModal={setShowModal}
         currentUser={currentUser}
         chats={chats}
         setChats={setChats}
@@ -285,7 +254,7 @@ export default function Chat() {
       />
       <SearchModal
         showModal={showSearchModal}
-        setShowModal={setShowSearchModal}
+        setShowModal={setShowModal}
         currentUser={currentUser}
         chats={chats}
         setChats={setChats}
