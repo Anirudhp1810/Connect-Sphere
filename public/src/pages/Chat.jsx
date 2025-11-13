@@ -12,257 +12,272 @@ import SearchModal from "../components/SearchModal";
 import { FiMenu } from "react-icons/fi";
 import { IoClose } from "react-icons/io5";
 
-export default function Chat() {
-  const navigate = useNavigate();
-  const socket = useRef();
-  
-  const [chats, setChats] = useState([]);
-  const [currentChat, setCurrentChat] = useState(undefined);
-  const [currentUser, setCurrentUser] = useState(undefined);
-  
-  const [onlineUsers, setOnlineUsers] = useState([]);
-
-  const [showGroupModal, setShowGroupModal] = useState(false);
-  const [showSearchModal, setShowSearchModal] = useState(false);
-  const [arrivalMessage, setArrivalMessage] = useState(null);
-  const [notifications, setNotifications] = useState({});
-  const [isLoaded, setIsLoaded] = useState(false);
-
-  const [isMobile, setIsMobile] = useState(false);
-  const [showContactsOverlay, setShowContactsOverlay] = useState(false);
-
-  const currentChatRef = useRef(undefined);
-  useEffect(() => {
-    currentChatRef.current = currentChat;
-  }, [currentChat]);
-
-  useEffect(() => {
-    const checkMobile = () => {
-      setIsMobile(window.innerWidth <= 800);
-      if (window.innerWidth > 800) setShowContactsOverlay(false);
-    };
-    checkMobile();
-    window.addEventListener("resize", checkMobile);
-    return () => window.removeEventListener("resize", checkMobile);
-  }, []);
-
-  useEffect(() => {
-    async function checkUser() {
-      const storageKey = process.env.REACT_APP_LOCALHOST_KEY;
-      const stored = localStorage.getItem(storageKey);
-      if (!stored) {
-        navigate("/login");
-        return;
-      }
-      try {
-        const userData = JSON.parse(stored);
-        const { data } = await axios.post(verifyUserRoute, { userId: userData._id });
-        if (data.status === false) {
-          localStorage.clear();
-          navigate("/login");
-        } else {
-          setCurrentUser(data.user);
-          setIsLoaded(true);
+// ErrorBoundary to catch runtime errors (e.g., white screen)
+class ErrorBoundary extends React.Component {
+    state = { hasError: false, error: null };
+    static getDerivedStateFromError(error) {
+        return { hasError: true, error };
+    }
+    componentDidCatch(error, info) {
+        console.error('ErrorBoundary caught:', error, info);
+    }
+    render() {
+        if (this.state.hasError) {
+            return <div>Chat error: {this.state.error?.message || 'Unknown error'}. Please reload.</div>;
         }
-      } catch (error) {
-        localStorage.clear();
-        navigate("/login");
-      }
+        return this.props.children;
     }
-    checkUser();
-  }, [navigate]);
+}
 
-  // Fetches chat list from API (Used for initial load AND socket updates now)
-  const getChats = useCallback(async () => {
-    if (currentUser) {
-      if (!currentUser.isAvatarImageSet) {
-        navigate("/setAvatar");
-        return;
-      }
-      try {
-        const { data } = await axios.get(`${fetchChatsRoute}/${currentUser._id}`);
-        setChats(data);
-
-        const initialNotifications = {};
-        data.forEach((chat) => {
-          if (chat.unreadCounts && chat.unreadCounts[currentUser._id]) {
-            initialNotifications[chat._id] = chat.unreadCounts[currentUser._id];
-          }
-        });
-        setNotifications(initialNotifications);
-      } catch (err) {
-        console.error("Failed to fetch chats:", err);
-      }
-    }
-  }, [currentUser, navigate]);
-
-  useEffect(() => {
-      getChats();
-  }, [getChats]);
-
-  const clearNotification = useCallback((chatId) => {
-    setNotifications((prev) => ({ ...prev, [chatId]: 0 }));
-    if (socket.current) {
-      socket.current.emit("mark-read", { chatId, userId: currentUser?._id });
-    }
-  }, [currentUser]);
-
-  // 🔴 FINAL FIX: Discard socket message data and trigger API fetch
- const handleMessageReceived = useCallback((newMessage) => {
-    const isMessageFromSelf = String(newMessage.sender?._id) === String(currentUser?._id);
-    if (isMessageFromSelf) return;
-
-    getChats();
-
-    const isForOpenChat = currentChatRef.current && newMessage.chat?._id && currentChatRef.current._id === newMessage.chat._id;
-
-    if (isForOpenChat) {
-        setArrivalMessage({
-            _id: newMessage._id,
-            sender: {
-                _id: newMessage.sender._id,
-                username: newMessage.sender.username,
-                avatarImage: newMessage.sender.avatarImage,
-            },
-            message: newMessage.message || '',
-            createdAt: newMessage.createdAt || new Date().toISOString(),
-            updatedAt: newMessage.updatedAt || new Date().toISOString(),
-            fromSelf: false,
-            readBy: Array.isArray(newMessage.readBy) ? newMessage.readBy : [],
-            chat: newMessage.chat._id, // Store only chat ID
-        });
-    } else {
-        setNotifications((prev) => ({
-            ...prev,
-            [newMessage.chat._id]: (prev[newMessage.chat._id] || 0) + 1,
-        }));
-    }
-}, [currentUser, getChats]);
-
-  // ✅ SOCKET SETUP
-  useEffect(() => {
-    if (!currentUser) return;
-
-    socket.current = io(host);
-
-    socket.current.on("connect", () => {
-      socket.current.emit("setup", currentUser);
-    });
-
-    socket.current.on("get-online-users", (users) => {
-      setOnlineUsers(users);
-    });
-
-    socket.current.on("user-online", (userId) => {
-      setOnlineUsers((prev) => {
-        if (!prev.includes(userId)) return [...prev, userId];
-        return prev;
-      });
-    });
-
-    socket.current.on("user-offline", (userId) => {
-      setOnlineUsers((prev) => prev.filter((id) => id !== userId));
-    });
-
-    socket.current.on("message-received", handleMessageReceived);
-    socket.current.on("added-to-group", (newChat) => getChats()); // Also trigger refresh for new group
+export default function Chat() {
+    const navigate = useNavigate();
+    const socket = useRef();
     
-    return () => {
-      if (socket.current) socket.current.disconnect();
+    const [chats, setChats] = useState([]);
+    const [currentChat, setCurrentChat] = useState(undefined);
+    const [currentUser, setCurrentUser] = useState(undefined);
+    
+    const [onlineUsers, setOnlineUsers] = useState([]);
+    const [showGroupModal, setShowGroupModal] = useState(false);
+    const [showSearchModal, setShowSearchModal] = useState(false);
+    const [arrivalMessage, setArrivalMessage] = useState(null);
+    const [notifications, setNotifications] = useState({});
+    const [isLoaded, setIsLoaded] = useState(false);
+    
+    const [isMobile, setIsMobile] = useState(false);
+    const [showContactsOverlay, setShowContactsOverlay] = useState(false);
+    
+    const currentChatRef = useRef(undefined);
+    useEffect(() => {
+        currentChatRef.current = currentChat;
+    }, [currentChat]);
+    
+    useEffect(() => {
+        const checkMobile = () => {
+            setIsMobile(window.innerWidth <= 800);
+            if (window.innerWidth > 800) setShowContactsOverlay(false);
+        };
+        checkMobile();
+        window.addEventListener("resize", checkMobile);
+        return () => window.removeEventListener("resize", checkMobile);
+    }, []);
+    
+    useEffect(() => {
+        async function checkUser() {
+            const storageKey = process.env.REACT_APP_LOCALHOST_KEY;
+            const stored = localStorage.getItem(storageKey);
+            if (!stored) {
+                navigate("/login");
+                return;
+            }
+            try {
+                const userData = JSON.parse(stored);
+                const { data } = await axios.post(verifyUserRoute, { userId: userData._id });
+                if (data.status === false) {
+                    localStorage.clear();
+                    navigate("/login");
+                } else {
+                    setCurrentUser(data.user);
+                    setIsLoaded(true);
+                }
+            } catch (error) {
+                localStorage.clear();
+                navigate("/login");
+            }
+        }
+        checkUser();
+    }, [navigate]);
+    
+    const getChats = useCallback(async () => {
+        if (currentUser) {
+            if (!currentUser.isAvatarImageSet) {
+                navigate("/setAvatar");
+                return;
+            }
+            try {
+                const { data } = await axios.get(`${fetchChatsRoute}/${currentUser._id}`);
+                setChats(data);
+                
+                const initialNotifications = {};
+                data.forEach((chat) => {
+                    if (chat.unreadCounts && chat.unreadCounts[currentUser._id]) {
+                        initialNotifications[chat._id] = chat.unreadCounts[currentUser._id];
+                    }
+                });
+                setNotifications(initialNotifications);
+            } catch (err) {
+                console.error("Failed to fetch chats:", err);
+            }
+        }
+    }, [currentUser, navigate]);
+    
+    useEffect(() => {
+        getChats();
+    }, [getChats]);
+    
+    const clearNotification = useCallback((chatId) => {
+        setNotifications((prev) => ({ ...prev, [chatId]: 0 }));
+        if (socket.current) {
+            socket.current.emit("mark-read", { chatId, userId: currentUser?._id });
+        }
+    }, [currentUser]);
+    
+    const handleMessageReceived = useCallback((newMessage) => {
+        const isMessageFromSelf = String(newMessage.sender?._id) === String(currentUser?._id);
+        if (isMessageFromSelf) return;
+        
+        getChats();
+        
+        const isForOpenChat = currentChatRef.current && newMessage.chat?._id && currentChatRef.current._id === newMessage.chat._id;
+        
+        if (isForOpenChat) {
+            setArrivalMessage({
+                _id: newMessage._id,
+                sender: {
+                    _id: newMessage.sender._id,
+                    username: newMessage.sender.username,
+                    avatarImage: newMessage.sender.avatarImage,
+                },
+                message: newMessage.message || '',
+                createdAt: newMessage.createdAt || new Date().toISOString(),
+                updatedAt: newMessage.updatedAt || new Date().toISOString(),
+                fromSelf: false,
+                readBy: Array.isArray(newMessage.readBy) ? newMessage.readBy : [],
+                chat: newMessage.chat._id,
+            });
+        } else {
+            setNotifications((prev) => ({
+                ...prev,
+                [newMessage.chat._id]: (prev[newMessage.chat._id] || 0) + 1,
+            }));
+        }
+    }, [currentUser, getChats]);
+    
+    useEffect(() => {
+        if (!currentUser) return;
+        
+        socket.current = io(host);
+        
+        socket.current.on("connect", () => {
+            socket.current.emit("setup", currentUser);
+        });
+        
+        socket.current.on("get-online-users", (users) => {
+            setOnlineUsers(users);
+        });
+        
+        socket.current.on("user-online", (userId) => {
+            setOnlineUsers((prev) => {
+                if (!prev.includes(userId)) return [...prev, userId];
+                return prev;
+            });
+        });
+        
+        socket.current.on("user-offline", (userId) => {
+            setOnlineUsers((prev) => prev.filter((id) => id !== userId));
+        });
+        
+        socket.current.on("message-received", handleMessageReceived);
+        socket.current.on("added-to-group", (newChat) => getChats());
+        
+        return () => {
+            if (socket.current) socket.current.disconnect();
+        };
+    }, [currentUser, handleMessageReceived, getChats]);
+    
+    const handleChatChange = (chat) => {
+        setCurrentChat(chat);
+        setNotifications((prev) => ({ ...prev, [chat._id]: 0 }));
+        if (socket.current) {
+            socket.current.emit("mark-read", { chatId: chat._id, userId: currentUser?._id });
+        }
+        if (isMobile) setShowContactsOverlay(false);
     };
-  }, [currentUser, handleMessageReceived, getChats]);
-
-  const handleChatChange = (chat) => {
-    setCurrentChat(chat);
-    setNotifications((prev) => ({ ...prev, [chat._id]: 0 }));
-    if (socket.current) {
-      socket.current.emit("mark-read", { chatId: chat._id, userId: currentUser?._id });
-    }
-    if (isMobile) setShowContactsOverlay(false);
-  };
-
-  if (!isLoaded || !currentUser) return <div />;
-
-  return (
-    <>
-      <Container>
-        {isMobile && !currentChat && (
-          <MobileTopBar>
-            <button className="menu-btn" onClick={() => setShowContactsOverlay((s) => !s)}>
-              {showContactsOverlay ? <IoClose /> : <FiMenu />}
-            </button>
-            <div className="mobile-title">Connect Sphere</div>
-          </MobileTopBar>
-        )}
-
-        <div className="container">
-          <div className={`sidebar ${isMobile && currentChat ? "hidden" : ""}`}>
-            <Contacts
-              chats={chats}
-              changeChat={handleChatChange}
-              currentUser={currentUser}
-              setShowGroupModal={setShowGroupModal}
-              setChats={setChats}
-              setCurrentChat={setCurrentChat}
-              setShowSearchModal={setShowSearchModal}
-              notifications={notifications}
-              clearNotification={clearNotification}
-              onlineUsers={onlineUsers} 
-            />
-          </div>
-
-          <div className={`main-area ${isMobile && !currentChat ? "hidden" : ""}`}>
-            {currentChat ? (
-              <ChatContainer
-                currentChat={currentChat}
+    
+    if (!isLoaded || !currentUser) return <div />;
+    
+    return (
+        <>
+            <Container>
+                {isMobile && !currentChat && (
+                    <MobileTopBar>
+                        <button className="menu-btn" onClick={() => setShowContactsOverlay((s) => !s)}>
+                            {showContactsOverlay ? <IoClose /> : <FiMenu />}
+                        </button>
+                        <div className="mobile-title">Connect Sphere</div>
+                    </MobileTopBar>
+                )}
+                
+                <div className="container">
+                    <div className={`sidebar ${isMobile && currentChat ? "hidden" : ""}`}>
+                        <Contacts
+                            chats={chats}
+                            changeChat={handleChatChange}
+                            currentUser={currentUser}
+                            setShowGroupModal={setShowGroupModal}
+                            setChats={setChats}
+                            setCurrentChat={setCurrentChat}
+                            setShowSearchModal={setShowSearchModal}
+                            notifications={notifications}
+                            clearNotification={clearNotification}
+                            onlineUsers={onlineUsers}
+                        />
+                    </div>
+                    
+                    <div className={`main-area ${isMobile && !currentChat ? "hidden" : ""}`}>
+                        {currentChat ? (
+                            <ErrorBoundary>
+                                <ChatContainer
+                                    currentChat={currentChat}
+                                    currentUser={currentUser}
+                                    socket={socket}
+                                    arrivalMessage={arrivalMessage}
+                                    setArrivalMessage={setArrivalMessage}
+                                    onBackClick={() => setCurrentChat(undefined)}
+                                />
+                            </ErrorBoundary>
+                        ) : (
+                            <Welcome currentUser={currentUser} />
+                        )}
+                    </div>
+                </div>
+                
+                {isMobile && showContactsOverlay && !currentChat && (
+                    <MobileOverlay>
+                        <Contacts
+                            chats={chats}
+                            changeChat={handleChatChange}
+                            currentUser={currentUser}
+                            setShowGroupModal={setShowGroupModal}
+                            setChats={setChats}
+                            setCurrentChat={setCurrentChat}
+                            setShowSearchModal={setShowSearchModal}
+                            notifications={notifications}
+                            clearNotification={clearNotification}
+                            onlineUsers={onlineUsers}
+                        />
+                    </MobileOverlay>
+                )}
+            </Container>
+            
+            <GroupChatModal
+                showModal={showGroupModal}
+                setShowModal={setShowGroupModal}
                 currentUser={currentUser}
+                chats={chats}
+                setChats={setChats}
                 socket={socket}
-                arrivalMessage={arrivalMessage}
-                setArrivalMessage={setArrivalMessage}
-                onBackClick={() => setCurrentChat(undefined)} 
-              />
-            ) : (
-              <Welcome currentUser={currentUser} />
-            )}
-          </div>
-        </div>
-
-        {isMobile && showContactsOverlay && !currentChat && (
-          <MobileOverlay>
-            <Contacts
-              chats={chats}
-              changeChat={handleChatChange}
-              currentUser={currentUser}
-              setShowGroupModal={setShowGroupModal}
-              setChats={setChats}
-              setCurrentChat={setCurrentChat}
-              setShowSearchModal={setShowSearchModal}
-              notifications={notifications}
-              clearNotification={clearNotification}
-              onlineUsers={onlineUsers}
             />
-          </MobileOverlay>
-        )}
-      </Container>
-
-      <GroupChatModal
-        showModal={showGroupModal}
-        setShowModal={setShowModal}
-        currentUser={currentUser}
-        chats={chats}
-        setChats={setChats}
-        socket={socket}
-      />
-      <SearchModal
-        showModal={showSearchModal}
-        setShowModal={setShowModal}
-        currentUser={currentUser}
-        chats={chats}
-        setChats={setChats}
-        setCurrentChat={setCurrentChat}
-      />
-    </>
-  );
+            <SearchModal
+                showModal={showSearchModal}
+                setShowModal={setShowSearchModal}
+                currentUser={currentUser}
+                chats={chats}
+                setChats={setChats}
+                setCurrentChat={setCurrentChat}
+            />
+        </>
+    );
 }
 
 // --- STYLES ---

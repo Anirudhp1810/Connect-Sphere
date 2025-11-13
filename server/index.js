@@ -101,11 +101,9 @@ io.on("connection", (socket) => {
   socket.on("typing", (room) => socket.in(room).emit("typing"));
   socket.on("stop-typing", (room) => socket.in(room).emit("stop-typing"));
   
-  socket.on("new-message", (newMessageReceived) => {
+ socket.on("new-message", (newMessageReceived) => {
     const chat = newMessageReceived.chat;
     if (!chat?.users) return;
-
-    // Construct a flat message object to avoid circular references
     const flatMessage = {
         _id: newMessageReceived._id,
         sender: {
@@ -118,7 +116,7 @@ io.on("connection", (socket) => {
         updatedAt: newMessageReceived.updatedAt,
         readBy: Array.isArray(newMessageReceived.readBy) ? newMessageReceived.readBy.map(u => u._id) : [],
         chat: {
-            _id: chat._id, // Send only chat ID, not full object
+            _id: chat._id,
             isGroupChat: chat.isGroupChat,
             chatName: chat.chatName,
             users: chat.users.map(u => ({
@@ -128,7 +126,6 @@ io.on("connection", (socket) => {
             })),
         },
     };
-
     chat.users.forEach((user) => {
         const userId = user._id ? user._id : user;
         if (userId.toString() === newMessageReceived.sender._id.toString()) return;

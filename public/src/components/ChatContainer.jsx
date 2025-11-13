@@ -166,16 +166,13 @@ useEffect(() => {
         setArrivalMessage(null);
         return;
     }
-
     const arrivingSenderId = String(arrivalMessage.sender?._id || '');
     const currentUserId = String(currentUser._id || '');
     if (arrivingSenderId === currentUserId) {
         setArrivalMessage(null);
         return;
     }
-
     const belongsToOpenChat = arrivalMessage.chat === currentChat._id || arrivalMessage.chat?._id === currentChat._id;
-
     if (belongsToOpenChat) {
         const formattedMsg = {
             _id: arrivalMessage._id || `temp-${Date.now()}`,
@@ -189,19 +186,16 @@ useEffect(() => {
             createdAt: arrivalMessage.createdAt || new Date().toISOString(),
             readBy: Array.isArray(arrivalMessage.readBy) ? arrivalMessage.readBy : [],
         };
-
         setMessages((prev) => {
             if (prev.some(msg => msg._id === formattedMsg._id)) {
                 return prev;
             }
             return [...prev, formattedMsg];
         });
-
         axios.post(markAsReadRoute, {
             chatId: currentChat._id,
             userId: currentUser._id,
         }).catch((err) => console.error('Failed to mark as read:', err));
-
         if (socket.current) {
             socket.current.emit('mark-read', {
                 chatId: currentChat._id,
@@ -210,7 +204,6 @@ useEffect(() => {
             });
         }
     }
-
     setArrivalMessage(null);
 }, [arrivalMessage, currentChat, currentUser, socket, setArrivalMessage]);
 
