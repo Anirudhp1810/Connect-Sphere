@@ -19,6 +19,7 @@ export default function Chat() {
   const [chats, setChats] = useState([]);
   const [currentChat, setCurrentChat] = useState(undefined);
   const [currentUser, setCurrentUser] = useState(undefined);
+  
   const [onlineUsers, setOnlineUsers] = useState([]);
 
   const [showGroupModal, setShowGroupModal] = useState(false);
@@ -104,18 +105,32 @@ export default function Chat() {
     }
   }, [currentUser]);
 
+  // 🔴 FINAL FIX LOCATION: Blocking self-sent messages at the source
   const handleMessageReceived = useCallback((newMessage) => {
+    
+    // 1. Check if the message sender is ME (using string coercion for safety)
+    const isMessageFromSelf = String(newMessage.sender?._id) === String(currentUser?._id);
+
+    // 🛑 CRITICAL GUARD: If this message came from me (via another device), 
+    // block the entire processing chain to prevent the setChats crash.
+    if (isMessageFromSelf) {
+        return; 
+    }
+
+    // 2. Proceed ONLY for messages from OTHERS
     const isForOpenChat = currentChatRef.current && newMessage.chat && currentChatRef.current._id === newMessage.chat._id;
 
     if (isForOpenChat) {
       setArrivalMessage({ ...newMessage, fromSelf: false });
     } else {
+      // Increment notifications (only runs if chat is NOT open)
       setNotifications((prev) => ({
         ...prev,
         [newMessage.chat._id]: (prev[newMessage.chat._id] || 0) + 1,
       }));
     }
 
+    // 3. Update the sidebar chats list (latest message/order update)
     setChats((prevChats) => {
       const existingIndex = prevChats.findIndex((c) => c._id === newMessage.chat._id);
       if (existingIndex !== -1) {
@@ -133,17 +148,15 @@ export default function Chat() {
         return [newChatItem, ...prevChats];
       }
     });
-  }, []);
+  }, [currentUser]); // currentUser must be a dependency
 
-  // ✅ FIXED SOCKET SETUP
+  // ✅ SOCKET SETUP (WITH RECONNECTION FIX)
   useEffect(() => {
     if (!currentUser) return;
 
     socket.current = io(host);
 
-    // 🔴 CRITICAL: Force 'setup' on connection to register user as online
     socket.current.on("connect", () => {
-      console.log("✅ Connected to Socket");
       socket.current.emit("setup", currentUser);
     });
 
@@ -162,6 +175,7 @@ export default function Chat() {
       setOnlineUsers((prev) => prev.filter((id) => id !== userId));
     });
 
+    // 🔴 LISTENER: Now uses the guarded handleMessageReceived
     socket.current.on("message-received", handleMessageReceived);
     socket.current.on("added-to-group", (newChat) => setChats((prev) => [newChat, ...prev]));
 
