@@ -161,45 +161,59 @@ export default function ChatContainer({
   }, [socket, currentChat]);
 
   // ✅ FINAL FIX FOR SELF-SENT CRASH (Bulletproof Guard + Explicit State Definition)
-  useEffect(() => {
-    if (!arrivalMessage) return;
-
-    // 1. Coerce IDs to reliable Strings for comparison
-    const arrivingSenderId = String(arrivalMessage.sender?._id || '');
-    const currentUserId = String(currentUser?._id || '');
-    
-    // 🛑 ULTIMATE GUARD: If the sender ID matches the current user ID, IGNORE.
-    if (arrivingSenderId && arrivingSenderId === currentUserId) {
+useEffect(() => {
+    if (!arrivalMessage || !currentChat || !currentUser) {
         setArrivalMessage(null);
         return;
     }
 
-    const belongsToOpenChat = currentChat && arrivalMessage.chat && currentChat._id === arrivalMessage.chat._id;
+    const arrivingSenderId = String(arrivalMessage.sender?._id || '');
+    const currentUserId = String(currentUser._id || '');
+    if (arrivingSenderId === currentUserId) {
+        setArrivalMessage(null);
+        return;
+    }
+
+    const belongsToOpenChat = arrivalMessage.chat === currentChat._id || arrivalMessage.chat?._id === currentChat._id;
 
     if (belongsToOpenChat) {
-      const formattedMsg = {
-        ...arrivalMessage,
-        // CRITICAL: Explicitly define fromSelf: false to prevent render crashes
-        fromSelf: false, 
-        createdAt: arrivalMessage.createdAt || new Date().toISOString(),
-      };
-      setMessages((prev) => [...prev, formattedMsg]);
+        const formattedMsg = {
+            _id: arrivalMessage._id || `temp-${Date.now()}`,
+            sender: {
+                _id: arrivalMessage.sender?._id || '',
+                username: arrivalMessage.sender?.username || 'Unknown',
+                avatarImage: arrivalMessage.sender?.avatarImage || '',
+            },
+            message: arrivalMessage.message || '',
+            fromSelf: false,
+            createdAt: arrivalMessage.createdAt || new Date().toISOString(),
+            readBy: Array.isArray(arrivalMessage.readBy) ? arrivalMessage.readBy : [],
+        };
 
-      axios.post(markAsReadRoute, {
-        chatId: currentChat._id,
-        userId: currentUser._id,
-      }).catch((err) => console.error(err));
-
-      if (socket.current) {
-        socket.current.emit("mark-read", {
-          chatId: currentChat._id,
-          chat: currentChat,
-          userId: currentUser._id,
+        setMessages((prev) => {
+            if (prev.some(msg => msg._id === formattedMsg._id)) {
+                return prev;
+            }
+            return [...prev, formattedMsg];
         });
-      }
+
+        axios.post(markAsReadRoute, {
+            chatId: currentChat._id,
+            userId: currentUser._id,
+        }).catch((err) => console.error('Failed to mark as read:', err));
+
+        if (socket.current) {
+            socket.current.emit('mark-read', {
+                chatId: currentChat._id,
+                chat: currentChat,
+                userId: currentUser._id,
+            });
+        }
     }
+
     setArrivalMessage(null);
-  }, [arrivalMessage, currentChat, currentUser, socket, setArrivalMessage]);
+}, [arrivalMessage, currentChat, currentUser, socket, setArrivalMessage]);
+
 
   useEffect(() => {
     scrollRef.current?.scrollIntoView({ behavior: "smooth" });

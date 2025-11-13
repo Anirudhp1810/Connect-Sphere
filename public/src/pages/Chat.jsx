@@ -108,35 +108,36 @@ export default function Chat() {
   }, [currentUser]);
 
   // 🔴 FINAL FIX: Discard socket message data and trigger API fetch
-  const handleMessageReceived = useCallback((newMessage) => {
-    
+ const handleMessageReceived = useCallback((newMessage) => {
     const isMessageFromSelf = String(newMessage.sender?._id) === String(currentUser?._id);
+    if (isMessageFromSelf) return;
 
-    // If the message came from me (via another device), ignore the event completely 
-    // to prevent the crash, as the sender already updated their sidebar locally.
-    if (isMessageFromSelf) {
-        return; 
-    }
+    getChats();
 
-    // 1. Immediately re-fetch the entire chat list to get the structurally correct latestMessage
-    getChats(); 
-
-    // 2. ONLY set arrivalMessage if the chat is currently open
-    const isForOpenChat = currentChatRef.current && newMessage.chat && currentChatRef.current._id === newMessage.chat._id;
+    const isForOpenChat = currentChatRef.current && newMessage.chat?._id && currentChatRef.current._id === newMessage.chat._id;
 
     if (isForOpenChat) {
-        setArrivalMessage({ ...newMessage, fromSelf: false });
+        setArrivalMessage({
+            _id: newMessage._id,
+            sender: {
+                _id: newMessage.sender._id,
+                username: newMessage.sender.username,
+                avatarImage: newMessage.sender.avatarImage,
+            },
+            message: newMessage.message || '',
+            createdAt: newMessage.createdAt || new Date().toISOString(),
+            updatedAt: newMessage.updatedAt || new Date().toISOString(),
+            fromSelf: false,
+            readBy: Array.isArray(newMessage.readBy) ? newMessage.readBy : [],
+            chat: newMessage.chat._id, // Store only chat ID
+        });
     } else {
-      // Increment notifications for closed chats (runs only if NOT from self)
-      setNotifications((prev) => ({
-        ...prev,
-        [newMessage.chat._id]: (prev[newMessage.chat._id] || 0) + 1,
-      }));
+        setNotifications((prev) => ({
+            ...prev,
+            [newMessage.chat._id]: (prev[newMessage.chat._id] || 0) + 1,
+        }));
     }
-    
-    // NOTE: The setChats logic has been moved inside getChats() and is removed from here.
-
-  }, [currentUser, getChats]); // getChats is now a dependency
+}, [currentUser, getChats]);
 
   // ✅ SOCKET SETUP
   useEffect(() => {

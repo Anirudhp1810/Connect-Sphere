@@ -104,12 +104,37 @@ io.on("connection", (socket) => {
   socket.on("new-message", (newMessageReceived) => {
     const chat = newMessageReceived.chat;
     if (!chat?.users) return;
+
+    // Construct a flat message object to avoid circular references
+    const flatMessage = {
+        _id: newMessageReceived._id,
+        sender: {
+            _id: newMessageReceived.sender._id,
+            username: newMessageReceived.sender.username,
+            avatarImage: newMessageReceived.sender.avatarImage,
+        },
+        message: newMessageReceived.message?.text || newMessageReceived.message || '',
+        createdAt: newMessageReceived.createdAt,
+        updatedAt: newMessageReceived.updatedAt,
+        readBy: Array.isArray(newMessageReceived.readBy) ? newMessageReceived.readBy.map(u => u._id) : [],
+        chat: {
+            _id: chat._id, // Send only chat ID, not full object
+            isGroupChat: chat.isGroupChat,
+            chatName: chat.chatName,
+            users: chat.users.map(u => ({
+                _id: u._id,
+                username: u.username,
+                avatarImage: u.avatarImage,
+            })),
+        },
+    };
+
     chat.users.forEach((user) => {
-      const userId = user._id ? user._id : user;
-      if (userId.toString() === newMessageReceived.sender._id.toString()) return;
-      io.to(userId.toString()).emit("message-received", newMessageReceived);
+        const userId = user._id ? user._id : user;
+        if (userId.toString() === newMessageReceived.sender._id.toString()) return;
+        io.to(userId.toString()).emit("message-received", flatMessage);
     });
-  });
+});
 
   socket.on("delete-message", (data) => {
     if (data?.chatId) io.to(data.chatId).emit("message-deleted", { messageId: data.messageId });
