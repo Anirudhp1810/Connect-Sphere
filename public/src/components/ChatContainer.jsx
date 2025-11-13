@@ -34,7 +34,7 @@ export default function ChatContainer({
     return new Set(saved ? JSON.parse(saved) : []);
   });
 
-  // Set chat header (Logic remains same)
+  // Set chat header
   useEffect(() => {
     if (currentChat && currentUser) {
       if (currentChat.isGroupChat) {
@@ -52,7 +52,7 @@ export default function ChatContainer({
     }
   }, [currentChat, currentUser]);
 
-  // Fetch messages and mark as read (Logic remains same)
+  // Fetch messages and mark as read
   useEffect(() => {
     async function fetchMessages() {
       if (currentChat && currentUser) {
@@ -89,7 +89,7 @@ export default function ChatContainer({
     fetchMessages();
   }, [currentChat, currentUser, socket]);
 
-  // Handle sending a new message (Logic remains same)
+  // Handle sending a new message
   const handleSendMsg = async (msg) => {
     if (!currentChat || !currentUser) return;
     try {
@@ -118,7 +118,7 @@ export default function ChatContainer({
     }
   };
 
-  // Socket listeners (Logic remains same)
+  // Socket listeners
   useEffect(() => {
     const currentSocket = socket.current;
 
@@ -160,14 +160,16 @@ export default function ChatContainer({
     };
   }, [socket, currentChat]);
 
-  // ✅ FIX FOR DOUBLE-PROCESSING AND CRASH
+  // ✅ FINAL FIX FOR SELF-SENT CRASH (Bulletproof Guard + Explicit State Definition)
   useEffect(() => {
     if (!arrivalMessage) return;
+
+    // 1. Coerce IDs to reliable Strings for comparison
+    const arrivingSenderId = String(arrivalMessage.sender?._id || '');
+    const currentUserId = String(currentUser?._id || '');
     
-    // 🛑 GUARD CLAUSE: If the message arrived, but the sender ID matches my current user ID,
-    // it means I sent it from another device. I should ignore it since the sending device 
-    // already added it locally via handleSendMsg.
-    if (arrivalMessage.sender?._id === currentUser?._id) {
+    // 🛑 ULTIMATE GUARD: If the sender ID matches the current user ID, IGNORE.
+    if (arrivingSenderId && arrivingSenderId === currentUserId) {
         setArrivalMessage(null);
         return;
     }
@@ -177,6 +179,8 @@ export default function ChatContainer({
     if (belongsToOpenChat) {
       const formattedMsg = {
         ...arrivalMessage,
+        // CRITICAL: Explicitly define fromSelf: false to prevent render crashes
+        fromSelf: false, 
         createdAt: arrivalMessage.createdAt || new Date().toISOString(),
       };
       setMessages((prev) => [...prev, formattedMsg]);
@@ -201,7 +205,7 @@ export default function ChatContainer({
     scrollRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isTyping]);
 
-  // --- Delete functions (Logic remains same) ---
+  // --- Delete functions ---
   const handleDeleteForEveryone = async (messageId) => {
     setActiveDeleteMenu(null);
     setMessages((prev) =>
@@ -234,7 +238,7 @@ export default function ChatContainer({
     localStorage.setItem("deletedForMe", JSON.stringify([...newDeleted]));
   };
 
-  // --- Helper Render Functions (Logic remains same) ---
+  // --- Helper Render Functions ---
   const getSeenStatus = (message) => {
     if (!message.fromSelf || !currentChat || !currentUser) return null;
     const otherUserIds = currentChat.users
