@@ -3,16 +3,14 @@ import axios from "axios";
 import { useNavigate } from "react-router-dom";
 import { io } from "socket.io-client";
 import styled from "styled-components";
-import { host, fetchChatsRoute, verifyUserRoute, deleteChatRoute } from "../utils/APIRoutes"; 
+import { host, fetchChatsRoute, verifyUserRoute, deleteChatRoute } from "../utils/APIRoutes";
 import ChatContainer from "../components/ChatContainer";
 import Contacts from "../components/Contacts";
 import Welcome from "../components/Welcome";
 import GroupChatModal from "../components/GroupChatModal";
 import SearchModal from "../components/SearchModal";
-import SettingsModal from "../components/SettingsModal"; 
-import { FiMenu } from "react-icons/fi";
-import { IoClose } from "react-icons/io5";
-import { BsExclamationTriangle } from "react-icons/bs"; 
+import SettingsModal from "../components/SettingsModal";
+import { BsExclamationTriangle } from "react-icons/bs";
 
 // ErrorBoundary to catch runtime errors
 class ErrorBoundary extends React.Component {
@@ -28,23 +26,22 @@ class ErrorBoundary extends React.Component {
 export default function Chat() {
     const navigate = useNavigate();
     const socket = useRef();
-    
+
     // Data State
     const [chats, setChats] = useState([]);
     const [currentChat, setCurrentChat] = useState(undefined);
     const [currentUser, setCurrentUser] = useState(undefined);
     const [onlineUsers, setOnlineUsers] = useState([]);
-    
+
     // UI State
     const [isLoaded, setIsLoaded] = useState(false);
     const [isMobile, setIsMobile] = useState(false);
-    const [showContactsOverlay, setShowContactsOverlay] = useState(false);
-    
+
     // Modal States
     const [showGroupModal, setShowGroupModal] = useState(false);
     const [showSearchModal, setShowSearchModal] = useState(false);
     const [showSettingsModal, setShowSettingsModal] = useState(false);
-    
+
     // Delete Modal State (Lifted here for full-screen blur)
     const [showDeleteModal, setShowDeleteModal] = useState(false);
     const [chatToDelete, setChatToDelete] = useState(null);
@@ -52,21 +49,20 @@ export default function Chat() {
     // Messaging State
     const [arrivalMessage, setArrivalMessage] = useState(null);
     const [notifications, setNotifications] = useState({});
-    
+
     const currentChatRef = useRef(undefined);
     useEffect(() => { currentChatRef.current = currentChat; }, [currentChat]);
-    
+
     // Check Mobile View
     useEffect(() => {
         const checkMobile = () => {
             setIsMobile(window.innerWidth <= 800);
-            if (window.innerWidth > 800) setShowContactsOverlay(false);
         };
         checkMobile();
         window.addEventListener("resize", checkMobile);
         return () => window.removeEventListener("resize", checkMobile);
     }, []);
-    
+
     // Verify User
     useEffect(() => {
         async function checkUser() {
@@ -76,13 +72,13 @@ export default function Chat() {
             try {
                 const userData = JSON.parse(stored);
                 const { data } = await axios.post(verifyUserRoute, { userId: userData._id });
-                if (data.status === false) { localStorage.clear(); navigate("/login"); } 
+                if (data.status === false) { localStorage.clear(); navigate("/login"); }
                 else { setCurrentUser(data.user); setIsLoaded(true); }
             } catch (error) { localStorage.clear(); navigate("/login"); }
         }
         checkUser();
     }, [navigate]);
-    
+
     // Fetch Chats
     const getChats = useCallback(async () => {
         if (currentUser) {
@@ -100,27 +96,27 @@ export default function Chat() {
             } catch (err) { console.error("Failed to fetch chats:", err); }
         }
     }, [currentUser, navigate]);
-    
+
     useEffect(() => { getChats(); }, [getChats]);
-    
+
     const clearNotification = useCallback((chatId) => {
         setNotifications((prev) => ({ ...prev, [chatId]: 0 }));
         if (socket.current) socket.current.emit("mark-read", { chatId, userId: currentUser?._id });
     }, [currentUser]);
-    
+
     // Handle Real-time Messages
     const handleMessageReceived = useCallback((newMessage) => {
         const isMessageFromSelf = String(newMessage.sender?._id) === String(currentUser?._id);
         if (isMessageFromSelf) return;
-        
+
         getChats(); // Refresh list order
-        
+
         const currentChatId = currentChatRef.current?._id;
         const messageChatId = newMessage.chat?._id || newMessage.chat;
 
         // Robust String Comparison
         const isForOpenChat = currentChatId && messageChatId && String(currentChatId) === String(messageChatId);
-        
+
         if (isForOpenChat) {
             setArrivalMessage({
                 _id: newMessage._id,
@@ -131,43 +127,76 @@ export default function Chat() {
                 fromSelf: false,
                 readBy: Array.isArray(newMessage.readBy) ? newMessage.readBy : [],
                 chat: messageChatId,
-                replyTo: newMessage.replyTo 
+                replyTo: newMessage.replyTo
             });
         } else {
             setNotifications((prev) => ({ ...prev, [messageChatId]: (prev[messageChatId] || 0) + 1, }));
         }
     }, [currentUser, getChats]);
-    
+
     // Socket Connection
     useEffect(() => {
         if (!currentUser) return;
         socket.current = io(host);
-        
+
         socket.current.on("connect", () => { socket.current.emit("add-user", currentUser._id); });
-        
+
         socket.current.on("online-users", (users) => { setOnlineUsers(users); });
         socket.current.on("user-online", (userId) => {
             setOnlineUsers((prev) => { if (Array.isArray(prev) && !prev.includes(userId)) return [...prev, userId]; return prev; });
         });
         socket.current.on("user-offline", (userId) => {
-             setOnlineUsers((prev) => (Array.isArray(prev) ? prev.filter((id) => id !== userId) : []));
+            setOnlineUsers((prev) => (Array.isArray(prev) ? prev.filter((id) => id !== userId) : []));
         });
-        
+
         // Listen for Settings updates (to refresh last seen/privacy)
         socket.current.on("user-settings-updated", () => { getChats(); });
 
         socket.current.on("msg-recieve", handleMessageReceived);
-        socket.current.on("new-message", handleMessageReceived); 
+        socket.current.on("new-message", handleMessageReceived);
         socket.current.on("added-to-group", () => getChats());
-        
+
+        // ✅ FIX: Listen for Real-Time Last Seen Updates
+        socket.current.on("user-lastseen-updated", ({ userId, lastSeenTime, showLastSeen }) => {
+            // 1. Update Chats List
+            setChats((prevChats) =>
+                prevChats.map((chat) => {
+                    if (chat.isGroupChat) return chat;
+                    const updatedUsers = chat.users.map((user) => {
+                        if (user._id === userId) {
+                            return { ...user, lastSeenTime, showLastSeen };
+                        }
+                        return user;
+                    });
+                    return { ...chat, users: updatedUsers };
+                })
+            );
+
+            // 2. Update Current Chat (if open)
+            if (currentChatRef.current && !currentChatRef.current.isGroupChat) {
+                const isChatWithUser = currentChatRef.current.users.some(u => u._id === userId);
+                if (isChatWithUser) {
+                    setCurrentChat((prevChat) => {
+                        if (!prevChat) return prevChat;
+                        const updatedUsers = prevChat.users.map((user) => {
+                            if (user._id === userId) {
+                                return { ...user, lastSeenTime, showLastSeen };
+                            }
+                            return user;
+                        });
+                        return { ...prevChat, users: updatedUsers };
+                    });
+                }
+            }
+        });
+
         return () => { if (socket.current) socket.current.disconnect(); };
     }, [currentUser, handleMessageReceived, getChats]);
-    
+
     const handleChatChange = (chat) => {
         setCurrentChat(chat);
         setNotifications((prev) => ({ ...prev, [chat._id]: 0 }));
         if (socket.current) socket.current.emit("mark-read", { chatId: chat._id, userId: currentUser?._id });
-        if (isMobile) setShowContactsOverlay(false);
     };
 
     // --- DELETE LOGIC ---
@@ -190,21 +219,12 @@ export default function Chat() {
             console.error("Error deleting chat", error);
         }
     };
-    
+
     if (!isLoaded || !currentUser) return <div />;
-    
+
     return (
         <>
             <Container>
-                {isMobile && !currentChat && (
-                    <MobileTopBar>
-                        <button className="menu-btn" onClick={() => setShowContactsOverlay((s) => !s)}>
-                            {showContactsOverlay ? <IoClose /> : <FiMenu />}
-                        </button>
-                        <div className="mobile-title">Connect Sphere</div>
-                    </MobileTopBar>
-                )}
-                
                 <div className="container">
                     <div className={`sidebar ${isMobile && currentChat ? "hidden" : ""}`}>
                         <Contacts
@@ -222,7 +242,7 @@ export default function Chat() {
                             onlineUsers={onlineUsers}
                         />
                     </div>
-                    
+
                     <div className={`main-area ${isMobile && !currentChat ? "hidden" : ""}`}>
                         {currentChat ? (
                             <ErrorBoundary>
@@ -241,27 +261,8 @@ export default function Chat() {
                         )}
                     </div>
                 </div>
-                
-                {isMobile && showContactsOverlay && !currentChat && (
-                    <MobileOverlay>
-                        <Contacts
-                            chats={chats}
-                            changeChat={handleChatChange}
-                            currentUser={currentUser}
-                            setShowGroupModal={setShowGroupModal}
-                            setChats={setChats}
-                            setCurrentChat={setCurrentChat}
-                            setShowSearchModal={setShowSearchModal}
-                            setShowSettingsModal={setShowSettingsModal}
-                            triggerDeleteModal={triggerDeleteModal}
-                            notifications={notifications}
-                            clearNotification={clearNotification}
-                            onlineUsers={onlineUsers}
-                        />
-                    </MobileOverlay>
-                )}
             </Container>
-            
+
             {/* --- GLOBAL MODALS --- */}
             <SettingsModal showModal={showSettingsModal} setShowModal={setShowSettingsModal} currentUser={currentUser} setCurrentUser={setCurrentUser} socket={socket} />
             <GroupChatModal showModal={showGroupModal} setShowModal={setShowGroupModal} currentUser={currentUser} chats={chats} setChats={setChats} socket={socket} />
@@ -274,14 +275,14 @@ export default function Chat() {
                         <div className="warning-icon"><BsExclamationTriangle /></div>
                         <h4>Delete Conversation?</h4>
                         <p>
-                            Are you sure you want to delete the chat with <br/>
+                            Are you sure you want to delete the chat with <br />
                             <span className="highlight">
-                                {chatToDelete.isGroupChat 
-                                    ? chatToDelete.chatName 
+                                {chatToDelete.isGroupChat
+                                    ? chatToDelete.chatName
                                     : (chatToDelete.users.find(u => u._id !== currentUser._id)?.username || "User")
                                 }
                             </span>?
-                            <br/>This action cannot be undone.
+                            <br />This action cannot be undone.
                         </p>
                         <div className="modal-actions">
                             <button className="cancel-btn" onClick={() => { setShowDeleteModal(false); setChatToDelete(null); }}>Cancel</button>
@@ -335,21 +336,4 @@ const Container = styled.div`
     .sidebar { width: 100%; border-right: none; }
     .main-area { width: 100%; }
   }
-`;
-
-const MobileTopBar = styled.div`
-  display: none;
-  @media screen and (max-width: 800px) {
-    display: flex; flex-shrink: 0; height: 65px; align-items: center; padding: 0 1.2rem;
-    background: rgba(11, 11, 20, 0.85); backdrop-filter: blur(12px);
-    border-bottom: 1px solid rgba(157, 78, 221, 0.2); z-index: 999;
-    .menu-btn { background: transparent; border: none; color: #e0e0ff; font-size: 1.6rem; display: flex; align-items: center; justify-content: center; cursor: pointer; margin-right: 1rem; }
-    .mobile-title { color: #fff; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; font-size: 1rem; }
-  }
-`;
-
-const MobileOverlay = styled.div`
-  position: fixed; top: 65px; left: 0; right: 0; bottom: 0; z-index: 1000; background-color: #0b0b14; overflow: hidden;
-  animation: slideIn 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
-  @keyframes slideIn { from { transform: translateX(-100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
 `;

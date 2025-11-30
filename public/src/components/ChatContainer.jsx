@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import Logo from "../assets/logo.png";   // ADD THIS LINE
+import Logo from "../assets/logo.png";
 import styled from "styled-components";
 import ChatInput from "./ChatInput";
 import axios from "axios";
@@ -12,7 +12,7 @@ import {
 import { AiFillFileText } from "react-icons/ai";
 import { IoMdTrash } from "react-icons/io";
 import { CgClose } from "react-icons/cg";
-import { BsCheck2All, BsReplyFill } from "react-icons/bs"; 
+import { BsCheck2All, BsReplyFill } from "react-icons/bs";
 import { IoArrowBack } from "react-icons/io5";
 
 export default function ChatContainer({
@@ -22,12 +22,12 @@ export default function ChatContainer({
   arrivalMessage,
   setArrivalMessage,
   onBackClick,
-  onlineUsers = [], // ✅ 1. Receive onlineUsers prop
+  onlineUsers = [],
 }) {
   const [messages, setMessages] = useState([]);
-  
+
   const chatContainerRef = useRef();
-  const scrollBehavior = useRef("auto"); 
+  const scrollBehavior = useRef("auto");
 
   const [isTyping, setIsTyping] = useState(false);
   const [chatName, setChatName] = useState("");
@@ -38,33 +38,32 @@ export default function ChatContainer({
     const saved = localStorage.getItem("deletedForMe");
     return new Set(saved ? JSON.parse(saved) : []);
   });
-  const otherUser = currentChat && !currentChat.isGroupChat 
-  ? currentChat.users.find(user => user._id !== currentUser._id) 
-  : null;
+  const otherUser = currentChat && !currentChat.isGroupChat
+    ? currentChat.users.find(user => user._id !== currentUser._id)
+    : null;
 
   // --- INITIALIZATION ---
-  // --- UPDATE HEADER WHEN CHAT CHANGES ---
-useEffect(() => {
-  if (!currentChat || !currentUser) {
-    setChatName("");
-    setChatAvatar("");
-    return;
-  }
-
-  if (currentChat.isGroupChat) {
-    setChatName(currentChat.chatName || "Group Chat");
-    setChatAvatar(currentChat.users[0]?.avatarImage || "");
-  } else {
-    const otherUser = currentChat.users.find(user => user._id !== currentUser._id);
-    if (otherUser) {
-      setChatName(otherUser.username);
-      setChatAvatar(otherUser.avatarImage);
-    } else {
-      setChatName("Unknown User");
+  useEffect(() => {
+    if (!currentChat || !currentUser) {
+      setChatName("");
       setChatAvatar("");
+      return;
     }
-  }
-}, [currentChat, currentUser]);
+
+    if (currentChat.isGroupChat) {
+      setChatName(currentChat.chatName || "Group Chat");
+      setChatAvatar(currentChat.users[0]?.avatarImage || "");
+    } else {
+      const otherUser = currentChat.users.find(user => user._id !== currentUser._id);
+      if (otherUser) {
+        setChatName(otherUser.username);
+        setChatAvatar(otherUser.avatarImage);
+      } else {
+        setChatName("Unknown User");
+        setChatAvatar("");
+      }
+    }
+  }, [currentChat, currentUser]);
 
   // --- FETCH MESSAGES ---
   useEffect(() => {
@@ -76,12 +75,12 @@ useEffect(() => {
             chatId: currentChat._id,
           });
           setMessages(response.data || []);
-          
+
           if (socket.current) {
             socket.current.emit("join-chat", currentChat._id);
             socket.current.emit("mark-read", { chatId: currentChat._id, chat: currentChat, userId: currentUser._id });
           }
-          await axios.post(markAsReadRoute, { chatId: currentChat._id, userId: currentUser._id }).catch(() => {});
+          await axios.post(markAsReadRoute, { chatId: currentChat._id, userId: currentUser._id }).catch(() => { });
         } catch (err) { console.error("Load Error:", err); }
       } else { setMessages([]); }
     }
@@ -94,22 +93,22 @@ useEffect(() => {
 
     const tempId = `temp-${Date.now()}`;
     const optimisticMsg = {
-        _id: tempId,
-        fromSelf: true,
-        message: msg,
-        sender: { 
-            _id: currentUser._id, 
-            username: currentUser.username, 
-            avatarImage: currentUser.avatarImage,
-            showReadReceipts: currentUser.showReadReceipts // Pass current privacy setting
-        },
-        readBy: [],
-        createdAt: new Date().toISOString(),
-        replyTo: replyToObj ? { 
-            _id: replyToObj._id, 
-            message: replyToObj.message || "", 
-            sender: replyToObj.sender || { username: "User" }
-        } : null
+      _id: tempId,
+      fromSelf: true,
+      message: msg,
+      sender: {
+        _id: currentUser._id,
+        username: currentUser.username,
+        avatarImage: currentUser.avatarImage,
+        showReadReceipts: currentUser.showReadReceipts
+      },
+      readBy: [],
+      createdAt: new Date().toISOString(),
+      replyTo: replyToObj ? {
+        _id: replyToObj._id,
+        message: replyToObj.message || "",
+        sender: replyToObj.sender || { username: "User" }
+      } : null
     };
 
     setMessages((prev) => [...prev, optimisticMsg]);
@@ -127,7 +126,7 @@ useEffect(() => {
 
       setMessages((prev) => prev.map(m => m._id === tempId ? {
         ...m,
-        _id: data._id, 
+        _id: data._id,
         message: data.message?.text || m.message,
         sender: data.sender
       } : m));
@@ -143,19 +142,19 @@ useEffect(() => {
     if (currentSocket) {
       currentSocket.on("typing", () => setIsTyping(true));
       currentSocket.on("stop-typing", () => setIsTyping(false));
-      
+
       currentSocket.on("message-deleted", (data) => {
         setMessages((prev) => prev.map((msg) => msg._id === data.messageId ? { ...msg, message: "[This message was deleted]" } : msg));
       });
-      
+
       currentSocket.on("messages-read", (data) => {
         if (data.chatId === currentChat?._id) {
           setMessages((prev) => prev.map((msg) => {
-              if (msg.readBy && !msg.readBy.includes(data.readByUserId)) {
-                return { ...msg, readBy: [...msg.readBy, data.readByUserId] };
-              }
-              return msg;
-            })
+            if (msg.readBy && !msg.readBy.includes(data.readByUserId)) {
+              return { ...msg, readBy: [...msg.readBy, data.readByUserId] };
+            }
+            return msg;
+          })
           );
         }
       });
@@ -173,100 +172,91 @@ useEffect(() => {
   // --- ARRIVAL MESSAGE HANDLER ---
   useEffect(() => {
     if (!arrivalMessage || !currentChat || !currentUser) { setArrivalMessage(null); return; }
-    
-    if (String(arrivalMessage.sender?._id) === String(currentUser._id)) { 
-        setArrivalMessage(null); 
-        return; 
+
+    if (String(arrivalMessage.sender?._id) === String(currentUser._id)) {
+      setArrivalMessage(null);
+      return;
     }
-    
+
     const belongsToOpenChat = arrivalMessage.chat === currentChat._id || arrivalMessage.chat?._id === currentChat._id;
     if (belongsToOpenChat) {
-        const formattedMsg = {
-            _id: arrivalMessage._id || `temp-${Date.now()}`,
-            sender: arrivalMessage.sender,
-            message: arrivalMessage.message || '',
-            fromSelf: false,
-            createdAt: arrivalMessage.createdAt || new Date().toISOString(),
-            readBy: arrivalMessage.readBy || [],
-            replyTo: arrivalMessage.replyTo,
-        };
-        
-        setMessages((prev) => {
-            if (prev.some(msg => msg._id === formattedMsg._id)) return prev;
-            return [...prev, formattedMsg];
-        });
-        
-        axios.post(markAsReadRoute, { chatId: currentChat._id, userId: currentUser._id }).catch(() => {});
-        if (socket.current) socket.current.emit('mark-read', { chatId: currentChat._id, chat: currentChat, userId: currentUser._id });
+      const formattedMsg = {
+        _id: arrivalMessage._id || `temp-${Date.now()}`,
+        sender: arrivalMessage.sender,
+        message: arrivalMessage.message || '',
+        fromSelf: false,
+        createdAt: arrivalMessage.createdAt || new Date().toISOString(),
+        readBy: arrivalMessage.readBy || [],
+        replyTo: arrivalMessage.replyTo,
+      };
+
+      setMessages((prev) => {
+        if (prev.some(msg => msg._id === formattedMsg._id)) return prev;
+        return [...prev, formattedMsg];
+      });
+
+      axios.post(markAsReadRoute, { chatId: currentChat._id, userId: currentUser._id }).catch(() => { });
+      if (socket.current) socket.current.emit('mark-read', { chatId: currentChat._id, chat: currentChat, userId: currentUser._id });
     }
     setArrivalMessage(null);
-  }, [arrivalMessage, currentChat, currentUser, setArrivalMessage]);
+  }, [arrivalMessage, currentChat, currentUser, setArrivalMessage, socket]);
 
   // --- SCROLL LOGIC ---
-  useEffect(() => { 
-    if(chatContainerRef.current) {
-        const { scrollHeight } = chatContainerRef.current;
-        
-        if(scrollBehavior.current === "auto") {
-            chatContainerRef.current.scrollTop = scrollHeight;
-            scrollBehavior.current = "smooth"; 
-        } else {
-            chatContainerRef.current.scrollTo({
-                top: scrollHeight,
-                behavior: "smooth"
-            });
-        }
+  useEffect(() => {
+    if (chatContainerRef.current) {
+      const { scrollHeight } = chatContainerRef.current;
+
+      if (scrollBehavior.current === "auto") {
+        chatContainerRef.current.scrollTop = scrollHeight;
+        scrollBehavior.current = "smooth";
+      } else {
+        chatContainerRef.current.scrollTo({
+          top: scrollHeight,
+          behavior: "smooth"
+        });
+      }
     }
   }, [messages, isTyping, replyMessage]);
 
   // --- HELPERS ---
-  
-  // ✅ 2. Get Header Status (Online / Last Seen)
+
   const getHeaderStatus = () => {
     if (!currentChat || currentChat.isGroupChat) return "";
     const otherUser = currentChat.users.find((u) => u._id !== currentUser._id);
     if (!otherUser) return "";
 
-    // Check Privacy (Reciprocity)
     if (currentUser.showLastSeen === false || otherUser.showLastSeen === false) {
-        return ""; // Show nothing if either user hid their status
+      return "";
     }
 
-    // Check Online
     const isOnline = onlineUsers.some(id => String(id) === String(otherUser._id));
     if (isOnline) return <span className="status-online">Online</span>;
 
-    // Check Last Seen
     if (otherUser.lastSeenTime) {
-        const date = new Date(otherUser.lastSeenTime);
-        // Format: "Last seen at 10:30 PM" or "Last seen Jan 12"
-        const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        const dateStr = date.toLocaleDateString();
-        const isToday = new Date().toDateString() === date.toDateString();
-        
-        return `Last seen ${isToday ? 'at ' + timeStr : 'on ' + dateStr}`;
+      const date = new Date(otherUser.lastSeenTime);
+      const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      const dateStr = date.toLocaleDateString();
+      const isToday = new Date().toDateString() === date.toDateString();
+
+      return `Last seen ${isToday ? 'at ' + timeStr : 'on ' + dateStr}`;
     }
-    
+
     return "Offline";
   };
 
-  // ✅ 3. Get Blue Tick Status (Privacy Aware)
   const getSeenStatus = (message) => {
     if (!message.fromSelf || !currentChat || !currentUser) return null;
     if (String(message._id).startsWith("temp-")) return <BsCheck2All className="read-icon" style={{ opacity: 0.5 }} />;
 
-    // Privacy Check 1: If I turned off receipts, I don't see blue ticks
     if (currentUser.showReadReceipts === false) return <BsCheck2All className="read-icon" />;
 
-    // Privacy Check 2: If they turned off receipts (for 1-on-1)
     if (!currentChat.isGroupChat) {
-        const otherUser = currentChat.users.find(u => u._id !== currentUser._id);
-        if (otherUser && otherUser.showReadReceipts === false) {
-             return <BsCheck2All className="read-icon" />; // Force Grey
-        }
+      const otherUser = currentChat.users.find(u => u._id !== currentUser._id);
+      if (otherUser && otherUser.showReadReceipts === false) {
+        return <BsCheck2All className="read-icon" />;
+      }
     }
 
-    // Standard Logic
     const otherUserIds = currentChat.users.map((u) => u._id).filter((id) => id !== currentUser._id);
     if (otherUserIds.length === 0) return null;
 
@@ -278,7 +268,7 @@ useEffect(() => {
     setActiveDeleteMenu(null);
     setMessages((prev) => prev.map((msg) => msg._id === messageId ? { ...msg, message: "[This message was deleted]" } : msg));
     if (socket.current) socket.current.emit("delete-message", { messageId, chatId: currentChat._id });
-    try { await axios.post(deleteMessageRoute, { messageId }); } catch (err) {}
+    try { await axios.post(deleteMessageRoute, { messageId }); } catch (err) { }
   };
 
   const handleDeleteForMe = (messageId) => {
@@ -309,117 +299,97 @@ useEffect(() => {
     return new Date(dateString).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
   };
 
-  const formatRelativeTime = (timestamp) => {
-  if (!timestamp) return "";
-  const now = new Date();
-  const date = new Date(timestamp);
-  const diffInSeconds = Math.floor((now - date) / 1000); // ← Change to seconds
-
-  if (diffInSeconds < 30) return "just now";  // ← Only 30 seconds, not 1 minute
-  if (diffInSeconds < 60) return `${diffInSeconds}s ago`;
-  if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m ago`;
-  if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h ago`;
-  if (diffInSeconds < 604800) return `${Math.floor(diffInSeconds / 86400)}d ago`;
-  return date.toLocaleDateString();
-};
-
   return (
     <>
       <Container>
         <div className="chat-header">
-  {/* Mobile back button */}
-  <div className="mobile-back-btn" onClick={onBackClick}>
-    <IoArrowBack />
-  </div>
+          <div className="mobile-back-btn" onClick={onBackClick}>
+            <IoArrowBack />
+          </div>
 
-  {/* Avatar + Name + Status */}
-  <div className="user-details">
-    <div className="avatar">
-      <img 
-        src={chatAvatar ? `data:image/svg+xml;base64,${chatAvatar}` : Logo} 
-        alt="avatar" 
-      />
-      {/* Online dot – always shows when online */}
-      {otherUser && onlineUsers.includes(otherUser._id) && (
-        <div className="online-status-dot"></div>
-      )}
-    </div>
+          <div className="user-details">
+            <div className="avatar">
+              <img
+                src={chatAvatar ? `data:image/svg+xml;base64,${chatAvatar}` : Logo}
+                alt="avatar"
+              />
+              {otherUser && onlineUsers.includes(otherUser._id) && (
+                <div className="online-status-dot"></div>
+              )}
+            </div>
 
-    <div className="header-info">
-      <h3>{chatName || "Loading..."}</h3>
-      <p className="status-text">
-        {otherUser && (
-          onlineUsers.includes(otherUser._id)
-            ? "Online"
-            : otherUser.showLastSeen
-              ? `Last seen ${formatRelativeTime(otherUser.lastSeenTime)}`
-              : ""
-        )}
-      </p>
-    </div>
-  </div>
-</div>
+            <div className="header-info">
+              <h3>{chatName || "Loading..."}</h3>
+              <p className="status-text">
+                {getHeaderStatus()}
+              </p>
+            </div>
+          </div>
+        </div>
 
         <div className="chat-messages" ref={chatContainerRef}>
           {messages.filter((msg) => !deletedForMe.has(msg._id)).map((message) => {
-              return (
-                <div key={message._id} className="message-wrapper">
-                  <div className={`message ${message.fromSelf ? "sended" : "recieved"}`}>
+            return (
+              <div key={message._id} className="message-wrapper">
+                <div className={`message ${message.fromSelf ? "sended" : "recieved"}`}>
+                  {currentChat.isGroupChat && !message.fromSelf && message.sender && (
+                    <div className="avatar-mini">
+                      <img
+                        src={message.sender.avatarImage ? `data:image/svg+xml;base64,${message.sender.avatarImage}` : Logo}
+                        alt="sender"
+                      />
+                    </div>
+                  )}
+
+                  <div className="message-bubble">
                     {currentChat.isGroupChat && !message.fromSelf && message.sender && (
-                       <div className="avatar-mini">
-                        <img src={`data:image/svg+xml;base64,${message.sender.avatarImage}`} alt="sender" />
+                      <span className="sender-name">{message.sender?.username}</span>
+                    )}
+
+                    {message.replyTo && message.message !== "[This message was deleted]" && (
+                      <div className="reply-quote">
+                        <div className="reply-bar"></div>
+                        <div className="reply-content">
+                          <span className="reply-sender">
+                            {message.replyTo.sender?.username || message.replyTo.senderUsername || "User"}
+                          </span>
+                          <p className="reply-text">
+                            {message.replyTo.message ? String(message.replyTo.message).substring(0, 50) : ""}...
+                          </p>
+                        </div>
                       </div>
                     )}
 
-                    <div className="message-bubble">
-                      {currentChat.isGroupChat && !message.fromSelf && message.sender && (
-                        <span className="sender-name">{message.sender?.username}</span>
-                      )}
-                      
-                      {message.replyTo && message.message !== "[This message was deleted]" && (
-                        <div className="reply-quote">
-                          <div className="reply-bar"></div>
-                          <div className="reply-content">
-                             <span className="reply-sender">
-                                {message.replyTo.sender?.username || message.replyTo.senderUsername || "User"}
-                             </span>
-                             <p className="reply-text">
-                               {message.replyTo.message ? String(message.replyTo.message).substring(0, 50) : ""}...
-                             </p>
+                    {!String(message._id).startsWith("temp-") && (
+                      <div className="action-triggers">
+                        {message.message !== "[This message was deleted]" && (
+                          <div className="trigger-btn reply" onClick={() => setReplyMessage(message)} title="Reply">
+                            <BsReplyFill />
                           </div>
+                        )}
+                        <div className="trigger-btn delete" onClick={() => setActiveDeleteMenu(message._id)} title="Delete">
+                          <IoMdTrash />
                         </div>
-                      )}
-
-                      {!String(message._id).startsWith("temp-") && (
-                        <div className="action-triggers">
-                             {message.message !== "[This message was deleted]" && (
-                                <div className="trigger-btn reply" onClick={() => setReplyMessage(message)} title="Reply">
-                                    <BsReplyFill />
-                                </div>
-                             )}
-                             <div className="trigger-btn delete" onClick={() => setActiveDeleteMenu(message._id)} title="Delete">
-                                <IoMdTrash />
-                             </div>
-                        </div>
-                      )}
-
-                      <div className="content">{renderMessageContent(message.message)}</div>
-                      
-                      <div className="meta-row">
-                          <span className="timestamp">{message.createdAt && formatTimestamp(message.createdAt)}</span>
-                          {message.fromSelf && message.message !== "[This message was deleted]" && (
-                              <div className="read-receipt">{getSeenStatus(message)}</div>
-                          )}
                       </div>
+                    )}
+
+                    <div className="content">{renderMessageContent(message.message)}</div>
+
+                    <div className="meta-row">
+                      <span className="timestamp">{message.createdAt && formatTimestamp(message.createdAt)}</span>
+                      {message.fromSelf && message.message !== "[This message was deleted]" && (
+                        <div className="read-receipt">{getSeenStatus(message)}</div>
+                      )}
                     </div>
                   </div>
                 </div>
-              );
-            })}
-            
+              </div>
+            );
+          })}
+
           {isTyping && (
             <div className="typing-indicator">
-               <div className="dots"><span></span><span></span><span></span></div>
+              <div className="dots"><span></span><span></span><span></span></div>
             </div>
           )}
         </div>
@@ -436,24 +406,24 @@ useEffect(() => {
 
       {activeDeleteMenu && (
         <DeleteMenuOverlay onClick={() => setActiveDeleteMenu(null)}>
-           <div className="delete-menu" onClick={(e) => e.stopPropagation()}>
-             <div className="menu-header">
-               <span>Options</span>
-               <CgClose onClick={() => setActiveDeleteMenu(null)} />
-             </div>
-             <button onClick={() => handleDeleteForMe(activeDeleteMenu)}><IoMdTrash/> Delete for me</button>
-             {(() => {
-                const msg = messages.find(m => m._id === activeDeleteMenu);
-                if (msg?.fromSelf && msg?.message !== "[This message was deleted]") {
-                   return (
-                     <button className="danger" onClick={() => handleDeleteForEveryone(activeDeleteMenu)}>
-                        <IoMdTrash/> Delete for everyone
-                     </button>
-                   );
-                }
-                return null;
-             })()}
-           </div>
+          <div className="delete-menu" onClick={(e) => e.stopPropagation()}>
+            <div className="menu-header">
+              <span>Options</span>
+              <CgClose onClick={() => setActiveDeleteMenu(null)} />
+            </div>
+            <button onClick={() => handleDeleteForMe(activeDeleteMenu)}><IoMdTrash /> Delete for me</button>
+            {(() => {
+              const msg = messages.find(m => m._id === activeDeleteMenu);
+              if (msg?.fromSelf && msg?.message !== "[This message was deleted]") {
+                return (
+                  <button className="danger" onClick={() => handleDeleteForEveryone(activeDeleteMenu)}>
+                    <IoMdTrash /> Delete for everyone
+                  </button>
+                );
+              }
+              return null;
+            })()}
+          </div>
         </DeleteMenuOverlay>
       )}
     </>
@@ -499,7 +469,6 @@ const Container = styled.div`
 
     .user-details {
       display: flex; align-items: center; gap: 1rem; width: 100%;
-      .mobile-back-btn { display: none; color: #9d4edd; font-size: 1.6rem; cursor: pointer; transition: 0.2s; &:hover{ color:#fff; } @media screen and (max-width: 800px) { display: flex; } }
       .avatar img { height: 3rem; width: 3rem; border-radius: 50%; object-fit: cover; border: 2px solid #9d4edd; box-shadow: 0 0 10px rgba(157, 78, 221, 0.3); }
       
       .header-info {
@@ -512,6 +481,12 @@ const Container = styled.div`
              .status-online { color: #10b981; font-weight: 600; }
          }
       }
+    }
+
+    .mobile-back-btn { 
+        display: none; color: #9d4edd; font-size: 1.6rem; cursor: pointer; transition: 0.2s; margin-right: 1rem;
+        &:hover{ color:#fff; } 
+        @media screen and (max-width: 800px) { display: flex; } 
     }
   }
 

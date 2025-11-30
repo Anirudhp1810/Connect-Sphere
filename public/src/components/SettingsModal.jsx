@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from "react";
-import styled, { keyframes } from "styled-components"; 
+import styled, { keyframes } from "styled-components";
 import axios from "axios";
-import { useNavigate } from "react-router-dom"; // ✅ Import Hook
-import { updatePrivacyRoute, logoutRoute } from "../utils/APIRoutes"; // ✅ Import Logout Route
+import Logo from "../assets/logo.png";
+import { useNavigate } from "react-router-dom";
+import { updatePrivacyRoute, logoutRoute } from "../utils/APIRoutes";
 import { CgClose } from "react-icons/cg";
 import { BsPerson, BsShieldLock } from "react-icons/bs";
-import { BiPowerOff } from "react-icons/bi"; // ✅ Import Logout Icon
+import { BiPowerOff } from "react-icons/bi";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 
@@ -15,7 +16,7 @@ export default function SettingsModal({
   currentUser,
   setCurrentUser,
 }) {
-  const navigate = useNavigate(); // ✅ Init Hook
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("profile");
   const [readReceipts, setReadReceipts] = useState(true);
   const [lastSeen, setLastSeen] = useState(true);
@@ -97,14 +98,14 @@ export default function SettingsModal({
 
           {/* --- TABS --- */}
           <TabContainer>
-            <div 
-              className={`tab ${activeTab === "profile" ? "active" : ""}`} 
+            <div
+              className={`tab ${activeTab === "profile" ? "active" : ""}`}
               onClick={() => setActiveTab("profile")}
             >
               <BsPerson /> Profile
             </div>
-            <div 
-              className={`tab ${activeTab === "privacy" ? "active" : ""}`} 
+            <div
+              className={`tab ${activeTab === "privacy" ? "active" : ""}`}
               onClick={() => setActiveTab("privacy")}
             >
               <BsShieldLock /> Privacy
@@ -117,7 +118,7 @@ export default function SettingsModal({
               <ProfileSection>
                 <div className="avatar-large">
                   <img
-                    src={`data:image/svg+xml;base64,${currentUser.avatarImage}`}
+                    src={currentUser.avatarImage ? `data:image/svg+xml;base64,${currentUser.avatarImage}` : Logo}
                     alt="avatar"
                   />
                 </div>
@@ -132,7 +133,7 @@ export default function SettingsModal({
 
                 {/* ✅ NEW: Logout Button in Profile */}
                 <LogoutButton onClick={handleLogout}>
-                    <BiPowerOff /> Log Out
+                  <BiPowerOff /> Log Out
                 </LogoutButton>
               </ProfileSection>
             )}

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback } from "react";
 import styled from "styled-components";
 import Logo from "../assets/logo.png";
 import { BsPlusLg, BsSearch } from "react-icons/bs";
-import { IoMdSettings, IoMdTrash } from "react-icons/io"; 
+import { IoMdSettings, IoMdTrash } from "react-icons/io";
 
 export default function Contacts({
   chats,
@@ -10,12 +10,12 @@ export default function Contacts({
   currentUser,
   setShowGroupModal,
   setShowSearchModal,
-  setShowSettingsModal, 
+  setShowSettingsModal,
   triggerDeleteModal, // ✅ Received from Chat.jsx
   setCurrentChat,
-  notifications = {}, 
-  clearNotification, 
-  onlineUsers = [], 
+  notifications = {},
+  clearNotification,
+  onlineUsers = [],
 }) {
   const [currentUserName, setCurrentUserName] = useState(undefined);
   const [currentUserImage, setCurrentUserImage] = useState(undefined);
@@ -113,7 +113,7 @@ export default function Contacts({
 
   const isUserOnline = (chat) => {
     if (chat.isGroupChat) return false;
-    
+
     const otherUser = chat.users?.find((u) => u._id !== currentUser?._id);
     if (!otherUser) return false;
 
@@ -143,7 +143,7 @@ export default function Contacts({
           <img src={Logo} alt="logo" />
           <h3>Connect Sphere</h3>
         </div>
-        
+
         <div className="action-toolbar">
           <button className="icon-btn" onClick={() => setShowSearchModal(true)} title="Search">
             <BsSearch />
@@ -173,41 +173,41 @@ export default function Contacts({
               <div className="accent-strip"></div>
 
               <div className="avatar-wrapper">
-                <img src={`data:image/svg+xml;base64,${getChatAvatar(chat)}`} alt="avatar" />
+                <img src={getChatAvatar(chat) ? `data:image/svg+xml;base64,${getChatAvatar(chat)}` : Logo} alt="avatar" />
                 {online && <div className="online-status-dot"></div>}
               </div>
-              
+
               <div className="info-wrapper">
                 <div className="top-row">
-                   <h3 className="username">{getChatName(chat)}</h3>
-                   {unreadCount > 0 && <span className="unread-badge">{unreadCount}</span>}
+                  <h3 className="username">{getChatName(chat)}</h3>
+                  {unreadCount > 0 && <span className="unread-badge">{unreadCount}</span>}
                 </div>
-                
+
                 <div className="bottom-row">
-                   <span className="status-text">
-                     {chat.isGroupChat 
-                        ? "Group Chat" 
-                        : (online 
-                            ? "Online" 
-                            : (otherUser?.showLastSeen && otherUser?.lastSeenTime 
-                                ? `Last seen ${formatRelativeTime(otherUser.lastSeenTime)}` 
-                                : "Offline")
-                          )
-                     }
-                   </span>
+                  <span className="status-text">
+                    {chat.isGroupChat
+                      ? "Group Chat"
+                      : (online
+                        ? "Online"
+                        : (otherUser?.showLastSeen && otherUser?.lastSeenTime
+                          ? `Last seen ${formatRelativeTime(otherUser.lastSeenTime)}`
+                          : "Offline")
+                      )
+                    }
+                  </span>
                 </div>
               </div>
 
               {/* ✅ Floating Delete Button (Triggers Parent Modal) */}
               {canDelete && (
-                 <button 
-                    className="floating-delete-btn" 
-                    onClick={(e) => { e.stopPropagation(); triggerDeleteModal(chat); }}
-                    title="Delete Conversation"
-                 >
-                   <IoMdTrash />
-                 </button>
-               )}
+                <button
+                  className="floating-delete-btn"
+                  onClick={(e) => { e.stopPropagation(); triggerDeleteModal(chat); }}
+                  title="Delete Conversation"
+                >
+                  <IoMdTrash />
+                </button>
+              )}
             </div>
           );
         })}
@@ -216,19 +216,19 @@ export default function Contacts({
       <div className="user-footer">
         <div className="current-user-info">
           <div className="avatar">
-            <img src={`data:image/svg+xml;base64,${currentUserImage}`} alt="avatar" />
+            <img src={currentUserImage ? `data:image/svg+xml;base64,${currentUserImage}` : Logo} alt="avatar" />
           </div>
           <div className="text-details">
             <h2>{currentUserName}</h2>
             <span>Active Now</span>
           </div>
         </div>
-        
+
         {/* ✅ Just Settings Button (Logout Moved to Modal) */}
         <div className="footer-actions">
-            <div className="settings-btn" onClick={() => setShowSettingsModal(true)} title="Settings">
-                <IoMdSettings />
-            </div>
+          <div className="settings-btn" onClick={() => setShowSettingsModal(true)} title="Settings">
+            <IoMdSettings />
+          </div>
         </div>
       </div>
     </Container>

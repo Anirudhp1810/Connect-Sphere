@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from "react";
 import styled from "styled-components";
 import axios from "axios";
+import Logo from "../assets/logo.png";
 import { allUsersRoute, accessChatRoute } from "../utils/APIRoutes";
-import { CgClose, CgSearch } from "react-icons/cg"; 
-import { BiLoaderAlt } from "react-icons/bi"; 
+import { CgClose, CgSearch } from "react-icons/cg";
+import { BiLoaderAlt } from "react-icons/bi";
 
 export default function SearchModal({
   showModal,
@@ -66,9 +67,9 @@ export default function SearchModal({
         userId: user._id,
         currentUserId: currentUser._id,
       });
-      
+
       if (!chats.find((c) => c._id === data._id)) {
-          setChats([data, ...chats]);
+        setChats([data, ...chats]);
       }
       setCurrentChat(data);
       setShowModal(false);
@@ -103,12 +104,12 @@ export default function SearchModal({
         <div className="search-results">
           {loading ? (
             <div className="state-container">
-                <BiLoaderAlt className="spinner" />
-                <span>Searching...</span>
+              <BiLoaderAlt className="spinner" />
+              <span>Searching...</span>
             </div>
           ) : (
             searchResult?.length > 0 ? (
-                searchResult.slice(0, 5).map((user) => (
+              searchResult.slice(0, 5).map((user) => (
                 <div
                   key={user._id}
                   className="user-card"
@@ -116,7 +117,7 @@ export default function SearchModal({
                 >
                   <div className="avatar">
                     <img
-                      src={`data:image/svg+xml;base64,${user.avatarImage}`}
+                      src={user.avatarImage ? `data:image/svg+xml;base64,${user.avatarImage}` : Logo}
                       alt="avatar"
                     />
                   </div>
@@ -127,11 +128,11 @@ export default function SearchModal({
                 </div>
               ))
             ) : (
-                search && !loading && (
-                    <div className="state-container">
-                        <span>No users found.</span>
-                    </div>
-                )
+              search && !loading && (
+                <div className="state-container">
+                  <span>No users found.</span>
+                </div>
+              )
             )
           )}
         </div>

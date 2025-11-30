@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import styled from "styled-components";
 import axios from "axios";
+import Logo from "../assets/logo.png";
 import { allUsersRoute, createGroupRoute } from "../utils/APIRoutes";
 import { CgClose } from "react-icons/cg";
 
@@ -159,7 +160,7 @@ export default function GroupChatModal({
                 onClick={() => handleGroup(user)}
               >
                 <div className="avatar">
-                  <img src={`data:image/svg+xml;base64,${user.avatarImage}`} alt={`${user.username} avatar`} />
+                  <img src={user.avatarImage ? `data:image/svg+xml;base64,${user.avatarImage}` : Logo} alt={`${user.username} avatar`} />
                 </div>
                 <div className="username">
                   <h3>{user.username}</h3>
