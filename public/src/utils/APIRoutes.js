@@ -27,3 +27,6 @@ export const markAsReadRoute = `${host}/api/messages/markread`;
 
 // === NEW ROUTE FOR VERIFYING USER ===
 export const verifyUserRoute = `${host}/api/auth/verify`;
+
+// === ✅ NEW ROUTE FOR PRIVACY SETTINGS ===
+export const updatePrivacyRoute = `${host}/api/auth/update-privacy`;

@@ -8,7 +8,14 @@ import Picker from "emoji-picker-react";
 import axios from "axios";
 import { uploadMessageRoute } from "../utils/APIRoutes";
 
-export default function ChatInput({ handleSendMsg, socket, currentChat, inputFocusRef }) {
+export default function ChatInput({ 
+  handleSendMsg, 
+  socket, 
+  currentChat, 
+  inputFocusRef, // Ensure this ref is passed from ChatContainer or created here
+  replyMessage, 
+  setReplyMessage 
+}) {
   const [msg, setMsg] = useState("");
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
@@ -16,11 +23,35 @@ export default function ChatInput({ handleSendMsg, socket, currentChat, inputFoc
   const fileInputRef = useRef(null);
   const wrapperRef = useRef(null);
 
+  // Fallback ref if one isn't passed (though ChatContainer passes it usually)
+  const localInputRef = useRef(null);
+  const activeRef = inputFocusRef || localInputRef;
+
   // File Upload State
   const [fileToUpload, setFileToUpload] = useState(null);
   const [filePreview, setFilePreview] = useState(null);
   const [filePreviewType, setFilePreviewType] = useState(null); 
   const [isUploading, setIsUploading] = useState(false);
+
+  // ✅ SMART AUTO-FOCUS LOGIC
+  useEffect(() => {
+    // 1. If Replying, always focus (User intent is clearly to type)
+    if (replyMessage && activeRef.current) {
+      activeRef.current.focus();
+      return;
+    }
+
+    // 2. If Changing Chat (or mounting):
+    // Only focus if we are on a larger screen (Desktop)
+    // On mobile, we want to avoid the keyboard popping up and covering messages
+    if (activeRef.current && window.innerWidth > 768) {
+        // Small timeout to ensure DOM is ready
+        setTimeout(() => {
+            activeRef.current.focus();
+        }, 100);
+    }
+  }, [currentChat, replyMessage, activeRef]);
+
 
   useEffect(() => {
     const handleClickOutside = (e) => {
@@ -90,32 +121,41 @@ export default function ChatInput({ handleSendMsg, socket, currentChat, inputFoc
         formData.append("file", fileToUpload);
         formData.append("from", localUser._id);
         formData.append("chatId", currentChat._id);
+        if(replyMessage) formData.append("replyTo", replyMessage._id); 
 
         const response = await axios.post(uploadMessageRoute, formData, {
           headers: { "Content-Type": "multipart/form-data" },
         });
 
         if (response?.data?.status && response.data.fileUrl) {
-          handleSendMsg(response.data.fileUrl);
+          handleSendMsg(response.data.fileUrl, replyMessage);
         }
       } catch (err) {
         console.error(err);
       } finally {
         setIsUploading(false);
         cancelFilePreview();
+        if(setReplyMessage) setReplyMessage(null); 
         setShowEmojiPicker(false);
       }
       return;
     }
 
     if (msg.trim().length > 0) {
-      handleSendMsg(msg);
+      handleSendMsg(msg, replyMessage);
       setMsg("");
+      if(setReplyMessage) setReplyMessage(null); 
+
       setShowEmojiPicker(false);
       if (typingTimeout.current) { clearTimeout(typingTimeout.current); typingTimeout.current = null; }
       if (isTyping && socket?.current) {
         socket.current.emit("stop-typing", currentChat._id);
         setIsTyping(false);
+      }
+      
+      // Keep focus on desktop after sending
+      if (activeRef.current && window.innerWidth > 768) {
+         activeRef.current.focus();
       }
     }
   };
@@ -162,6 +202,17 @@ export default function ChatInput({ handleSendMsg, socket, currentChat, inputFoc
 
   return (
     <InputContainer ref={wrapperRef}>
+      
+      {replyMessage && (
+        <ReplyBanner>
+           <div className="reply-content">
+              <span className="reply-to">Replying to {replyMessage.sender?.username || "User"}</span>
+              <span className="reply-text">{replyMessage.message}</span>
+           </div>
+           <CgClose className="close-btn" onClick={() => setReplyMessage(null)} />
+        </ReplyBanner>
+      )}
+
       {showEmojiPicker && (
         <div className="emoji-picker-wrapper">
           <Picker 
@@ -214,7 +265,7 @@ export default function ChatInput({ handleSendMsg, socket, currentChat, inputFoc
           </div>
         ) : (
           <input
-            ref={inputFocusRef}
+            ref={activeRef} // ✅ Updated to use our activeRef logic
             type="text"
             placeholder="Type a message..."
             value={msg}
@@ -235,15 +286,58 @@ export default function ChatInput({ handleSendMsg, socket, currentChat, inputFoc
   );
 }
 
-/* ---------------- STYLES: ALIGNED HEIGHT & THEME ---------------- */
+/* ---------------- STYLES ---------------- */
+
+const ReplyBanner = styled.div`
+  position: absolute;
+  bottom: 100%; 
+  left: 0; 
+  right: 0;
+  background-color: #15151e;
+  padding: 10px 20px;
+  border-top: 1px solid #9d4edd; 
+  border-top-left-radius: 12px;
+  border-top-right-radius: 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  z-index: 10;
+  box-shadow: 0 -5px 15px rgba(0,0,0,0.3);
+
+  .reply-content {
+    display: flex;
+    flex-direction: column;
+    border-left: 3px solid #9d4edd;
+    padding-left: 10px;
+    
+    .reply-to {
+      color: #9d4edd;
+      font-weight: 700;
+      font-size: 0.8rem;
+    }
+    .reply-text {
+      color: #ccc;
+      font-size: 0.85rem;
+      white-space: nowrap; 
+      overflow: hidden; 
+      text-overflow: ellipsis; 
+      max-width: 70vw;
+    }
+  }
+  .close-btn {
+    color: #aebac1;
+    font-size: 1.2rem;
+    cursor: pointer;
+    &:hover { color: #fff; }
+  }
+`;
 
 const InputContainer = styled.div`
-  /* ✅ FIXED HEIGHT: Matches Contacts.jsx Footer (80px) exactly */
   height: 80px;
   flex-shrink: 0;
+  position: relative;
   
-  background-color: #0b0b14; /* Deep Navy */
-  /* Border Color matches Contacts Footer Border */
+  background-color: #0b0b14; 
   border-top: 1px solid rgba(255, 255, 255, 0.05); 
   
   display: flex;

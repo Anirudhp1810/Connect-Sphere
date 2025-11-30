@@ -4,7 +4,7 @@ const cloudinary = require("cloudinary").v2;
 const multer = require("multer");
 const { CloudinaryStorage } = require("multer-storage-cloudinary");
 
-// --- Cloudinary/Multer config ---
+// --- Cloudinary Config ---
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
   api_key: process.env.CLOUDINARY_API_KEY,
@@ -22,68 +22,88 @@ const storage = new CloudinaryStorage({
 
 module.exports.uploadFile = multer({ storage }).single("file");
 
+// GET ALL MESSAGES
 module.exports.getMessages = async (req, res, next) => {
   try {
     const { chatId, from } = req.body;
 
-    const messages = await Messages.find({
-      chat: chatId,
-    })
-    .populate("sender", "username avatarImage")
-    .populate("readBy", "_id")
-    .sort({ updatedAt: 1 });
+    const messages = await Messages.find({ chat: chatId })
+      // ✅ UPDATE: Include showReadReceipts in sender details
+      .populate("sender", "username avatarImage showReadReceipts")
+      .populate("readBy", "_id")
+      .populate({
+        path: "replyTo",
+        populate: {
+          path: "sender",
+          select: "username avatarImage",
+        },
+      })
+      .sort({ updatedAt: 1 });
 
-    const projectedMessages = messages.map((msg) => {
-      return {
-        _id: msg._id,
-        fromSelf: msg.sender._id.toString() === from,
-        message: msg.message.text,
-        sender: msg.sender,
-        readBy: msg.readBy.map(user => user._id),
-        createdAt: msg.createdAt,
-      };
-    });
+    const projectedMessages = messages.map((msg) => ({
+      _id: msg._id,
+      fromSelf: msg.sender._id.toString() === from,
+      message: msg.message.text,
+      sender: msg.sender, // This now includes showReadReceipts
+      readBy: msg.readBy.map((user) => user._id),
+      createdAt: msg.createdAt,
+      replyTo: msg.replyTo
+        ? {
+            _id: msg.replyTo._id,
+            message: msg.replyTo.message.text,
+            sender: msg.replyTo.sender,
+          }
+        : null,
+    }));
+
     res.json(projectedMessages);
   } catch (ex) {
     next(ex);
   }
 };
 
-// === UPDATED addMessage function ===
+// ADD TEXT MESSAGE
 module.exports.addMessage = async (req, res, next) => {
   try {
-    const { from, chatId, message } = req.body;
-    
-    let data = await Messages.create({
+    const { from, chatId, message, replyTo } = req.body;
+
+    const newMessage = await Messages.create({
       message: { text: message },
       sender: from,
       chat: chatId,
+      replyTo: replyTo || null,
     });
 
-    if (data) {
-      // ✅ UPDATE: Safely increment unreadCounts
+    if (newMessage) {
       const chat = await Chat.findById(chatId);
-      
       if (chat) {
-        chat.users.forEach(userId => {
+        chat.users.forEach((userId) => {
           if (userId.toString() !== from) {
             const currentCount = chat.unreadCounts.get(userId.toString()) || 0;
             chat.unreadCounts.set(userId.toString(), currentCount + 1);
           }
         });
-        
-        chat.latestMessage = data._id;
-        
-        // ✅ CRITICAL FIX: Tell Mongoose the Map changed so it saves properly
-        chat.markModified('unreadCounts'); 
+        chat.latestMessage = newMessage._id;
+        chat.markModified("unreadCounts");
         await chat.save();
       }
 
-      data = await data.populate("sender", "username avatarImage");
-      data = await data.populate("chat");
-      data = await data.populate("readBy", "_id");
+            const populatedMessage = await Messages.findById(newMessage._id)
+        .populate("sender", "username avatarImage showReadReceipts showLastSeen")
+        .populate({
+          path: "chat",
+          populate: {
+            path: "users",
+            select: "username avatarImage _id showLastSeen showReadReceipts"
+          }
+        })
+        .populate("readBy", "_id")
+        .populate({
+          path: "replyTo",
+          populate: { path: "sender", select: "username avatarImage" }
+        });
 
-      return res.json(data);
+      return res.json(populatedMessage);
     } else {
       return res.json({ msg: "Failed to add message to the database" });
     }
@@ -92,7 +112,7 @@ module.exports.addMessage = async (req, res, next) => {
   }
 };
 
-// === UPDATED addFileMessage function ===
+// ADD FILE MESSAGE
 module.exports.addFileMessage = async (req, res, next) => {
   try {
     if (!req.file) {
@@ -102,44 +122,45 @@ module.exports.addFileMessage = async (req, res, next) => {
     const { from, chatId } = req.body;
     const fileUrl = req.file.path;
 
-    let data = await Messages.create({
+    const newMessage = await Messages.create({
       message: { text: fileUrl },
       sender: from,
       chat: chatId,
     });
 
-    if (data) {
-      // ✅ UPDATE: Safely increment unreadCounts
+    if (newMessage) {
       const chat = await Chat.findById(chatId);
-      
       if (chat) {
-        chat.users.forEach(userId => {
+        chat.users.forEach((userId) => {
           if (userId.toString() !== from) {
             const currentCount = chat.unreadCounts.get(userId.toString()) || 0;
             chat.unreadCounts.set(userId.toString(), currentCount + 1);
           }
         });
-
-        chat.latestMessage = data._id;
-        
-        // ✅ CRITICAL FIX: Mark as modified
-        chat.markModified('unreadCounts');
-        await chat.save(); 
+        chat.latestMessage = newMessage._id;
+        chat.markModified("unreadCounts");
+        await chat.save();
       }
 
-      data = await data.populate("sender", "username avatarImage");
-      data = await data.populate("chat");
-      data = await data.populate("readBy", "_id");
-      
-      return res.json(data);
-    } else {
-      return res.json({ msg: "Failed to save file message to the database" });
+            const populatedMessage = await Messages.findById(newMessage._id)
+        .populate("sender", "username avatarImage showReadReceipts showLastSeen")
+        .populate({
+          path: "chat",
+          populate: {
+            path: "users",
+            select: "username avatarImage _id showLastSeen showReadReceipts"
+          }
+        })
+        .populate("readBy", "_id");
+
+      return res.json(populatedMessage);
     }
   } catch (ex) {
     next(ex);
   }
 };
 
+// DELETE MESSAGE (unchanged)
 module.exports.deleteMessage = async (req, res, next) => {
   try {
     const { messageId } = req.body;
@@ -160,29 +181,24 @@ module.exports.deleteMessage = async (req, res, next) => {
   }
 };
 
-// === UPDATED markAsRead function ===
+// MARK AS READ (unchanged)
 module.exports.markAsRead = async (req, res, next) => {
   try {
     const { chatId, userId } = req.body;
 
-    // 1. Mark actual messages as read
     await Messages.updateMany(
       {
         chat: chatId,
         sender: { $ne: userId },
         readBy: { $nin: [userId] },
       },
-      {
-        $addToSet: { readBy: userId },
-      }
+      { $addToSet: { readBy: userId } }
     );
 
-    // 2. ✅ Reset unreadCount to 0
     const chat = await Chat.findById(chatId);
     if (chat) {
       chat.unreadCounts.set(userId, 0);
-      // ✅ CRITICAL FIX: Mark as modified
-      chat.markModified('unreadCounts');
+      chat.markModified("unreadCounts");
       await chat.save();
     }
 

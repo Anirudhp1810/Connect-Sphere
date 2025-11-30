@@ -1,20 +1,27 @@
-const { 
-  addMessage, 
-  getMessages, 
-  addFileMessage, 
+const {
+  addMessage,
+  getMessages,
+  addFileMessage,
   uploadFile,
   deleteMessage,
-  markAsRead // <-- 1. Import the new markAsRead function
+  markAsRead,
 } = require("../controllers/messageController");
 
 const router = require("express").Router();
 
+// Add text message (now supports optional "replyTo" in body)
 router.post("/addmsg/", addMessage);
+
+// Get all messages in a chat (now includes populated replyTo data)
 router.post("/getmsg/", getMessages);
+
+// Upload and add file message
 router.post("/addfilemsg/", uploadFile, addFileMessage);
+
+// Delete a message (soft delete)
 router.post("/deletemsg/", deleteMessage);
 
-// 2. Add the new route for marking messages as read
+// Mark messages as read in a chat
 router.post("/markread/", markAsRead);
 
 module.exports = router;

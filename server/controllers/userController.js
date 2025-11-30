@@ -13,12 +13,10 @@ module.exports.login = async (req, res, next) => {
     const isPasswordValid = await bcrypt.compare(password, user.password);
     if (!isPasswordValid)
       return res.json({ msg: "Incorrect Username or Password", status: false });
-    
-    // --- THIS IS THE FIX ---
+
     const userObj = user.toObject();
     delete userObj.password;
     return res.json({ status: true, user: userObj });
-    // --- END FIX ---
 
   } catch (ex) {
     next(ex);
@@ -40,12 +38,10 @@ module.exports.register = async (req, res, next) => {
       username,
       password: hashedPassword,
     });
-    
-    // --- THIS IS THE FIX ---
+
     const userObj = user.toObject();
     delete userObj.password;
     return res.json({ status: true, user: userObj });
-    // --- END FIX ---
 
   } catch (ex) {
     next(ex);
@@ -65,7 +61,8 @@ module.exports.getAllUsers = async (req, res, next) => {
 
     const users = await User.find(keyword)
       .find({ _id: { $ne: req.params.id } })
-      .select(["email", "username", "avatarImage", "_id"]);
+      // ✅ UPDATE: Include privacy flags so frontend can check them
+      .select(["email", "username", "avatarImage", "_id", "showLastSeen", "showReadReceipts"]);
       
     return res.json(users);
   } catch (ex) {
@@ -89,6 +86,36 @@ module.exports.setAvatar = async (req, res, next) => {
       isSet: userData.isAvatarImageSet,
       image: userData.avatarImage,
     });
+  } catch (ex) {
+    next(ex);
+  }
+};
+
+// ✅ FINAL VERSION - Real-time Privacy Updates for Everyone
+module.exports.updatePrivacySettings = async (req, res, next) => {
+  try {
+    const { userId, showReadReceipts, showLastSeen } = req.body;
+
+    const user = await User.findByIdAndUpdate(
+      userId,
+      { showReadReceipts, showLastSeen },
+      { new: true }
+    ).select("-password");
+
+    if (!user) {
+      return res.status(404).json({ msg: "User not found", status: false });
+    }
+
+    // 🔥 BROADCAST TO ALL CONNECTED USERS (Real-time update!)
+    if (global.chatSocket) {
+      global.chatSocket.emit("privacy-updated", {
+        userId: user._id.toString(),
+        showReadReceipts: user.showReadReceipts,
+        showLastSeen: user.showLastSeen,
+      });
+    }
+
+    return res.json({ status: true, user });
   } catch (ex) {
     next(ex);
   }
@@ -236,7 +263,7 @@ module.exports.addToGroup = async (req, res, next) => {
     if (!added) {
       return res.status(404).send("Chat Not Found");
     } else {
-      res.json(added); // <-- THIS IS THE FIX
+      res.json(added); 
     }
   } catch (ex) {
     next(ex);
@@ -272,7 +299,6 @@ module.exports.deleteChat = async (req, res, next) => {
     return res.status(400).send({ message: "Chat ID is required" });
   }
 
-  // --- THIS IS THE FIX (Removed duplicated try block) ---
   try {
     const chat = await Chat.findById(chatId);
     if (!chat) {
@@ -287,7 +313,6 @@ module.exports.deleteChat = async (req, res, next) => {
     next(ex);
   }
 };
-// --- END FIX ---
 
 module.exports.verifyUser = async (req, res, next) => {
   try {
@@ -300,6 +325,7 @@ module.exports.verifyUser = async (req, res, next) => {
        return res.json({ status: false, msg: "Invalid user ID format." });
     }
 
+    // ✅ UPDATE: Include privacy settings in verification response
     const user = await User.findById(userId).select("-password");
 
     if (!user) {
@@ -312,3 +338,4 @@ module.exports.verifyUser = async (req, res, next) => {
     next(ex);
   }
 };
+

@@ -11,20 +11,22 @@ const {
   addToGroup,
   removeFromGroup,
   deleteChat,
-  verifyUser, // <-- 1. IMPORT the new function
+  verifyUser,
+  updatePrivacySettings, // ✅ 1. IMPORT the new function
 } = require("../controllers/userController");
 
 const router = require("express").Router();
 
-// --- Existing User Routes ---
+// --- User Auth Routes ---
 router.post("/login", login);
 router.post("/register", register);
 router.get("/allusers/:id", getAllUsers);
 router.post("/setavatar/:id", setAvatar);
 router.get("/logout/:id", logOut);
+router.post("/verify", verifyUser);
 
-// --- NEW VERIFY ROUTE ---
-router.post("/verify", verifyUser); // <-- 2. ADD the new route
+// --- ✅ NEW: Privacy Settings Route ---
+router.post("/update-privacy", updatePrivacySettings); 
 
 // --- Chat & Group Routes ---
 router.post("/chat", accessChat);
