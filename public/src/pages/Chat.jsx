@@ -325,7 +325,7 @@ const ConfirmationOverlay = styled.div`
 `;
 
 const Container = styled.div`
-  font-family: 'Inter', sans-serif; height: 100vh; width: 100vw; background-color: #050509;
+  font-family: 'Inter', sans-serif; height: 100dvh; width: 100vw; background-color: #050509;
   display: flex; flex-direction: column; overflow: hidden;
   .container { flex: 1; height: 100%; width: 100%; display: grid; grid-template-columns: 350px 1fr; background-color: #050509; position: relative; }
   .sidebar { height: 100%; overflow: hidden; border-right: 1px solid rgba(157, 78, 221, 0.15); background-color: #0b0b14; z-index: 10; }
